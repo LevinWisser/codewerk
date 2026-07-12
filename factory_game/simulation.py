@@ -97,13 +97,14 @@ class Simulation:
             return False
 
     def _drop(self) -> None:
-        if (self.state.drone_x, self.state.drone_y) != self.SHIPPING:
-            raise GameError("Teile koennen nur im Versand abgelegt werden.")
         if self.state.inventory is None:
             raise GameError("Die Drohne traegt kein Teil.")
-        item = self.state.inventory
-        self.state.delivered[item] = self.state.delivered.get(item, 0) + 1
-        self.state.inventory = None
+        if (self.state.drone_x, self.state.drone_y) == self.SHIPPING:
+            item = self.state.inventory
+            self.state.delivered[item] = self.state.delivered.get(item, 0) + 1
+            self.state.inventory = None
+            return
+        self._load_machine()
 
     def _get_position(self) -> tuple[int, int]:
         return self.state.drone_x, self.state.drone_y
@@ -131,7 +132,9 @@ class Simulation:
         if Counter(machine.inputs) != Counter(machine.recipe_inputs):
             raise GameError(f"{machine.name} ist noch nicht vollstaendig beladen.")
         machine.inputs.clear()
-        machine.remaining = machine.duration
+        # The generic command tick follows this call. Add one so the documented
+        # processing duration starts after start_machine() has completed.
+        machine.remaining = machine.duration + 1
 
     def _machine_is_done(self) -> bool:
         return self._machine_here().output is not None

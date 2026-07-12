@@ -4,6 +4,7 @@ from pathlib import Path
 
 from factory_game.content import MISSIONS
 from factory_game.persistence import SaveStore
+from factory_game.projects import load_mission_project, migrate_shared_files, store_mission_project
 from factory_game.simulation import GameError, Simulation
 
 
@@ -26,11 +27,11 @@ def make_product(simulation, machine_position, input_items):
         else:
             raise AssertionError("Test helper expects preloaded non-steel items")
         move_to(simulation, *machine_position)
-        simulation.execute("load_machine", [])
+        simulation.execute("drop", [])
     simulation.execute("start_machine", [])
     while not simulation.execute("machine_is_done", []):
         simulation.execute("wait", [])
-    simulation.execute("collect_output", [])
+    simulation.execute("pick_up", [])
 
 
 class SimulationTests(unittest.TestCase):
@@ -64,24 +65,39 @@ class SimulationTests(unittest.TestCase):
         simulation.execute("drop", [])
         self.assertTrue(simulation.mission_complete())
 
+    def test_drop_loads_machine_and_pick_up_collects_after_exact_duration(self):
+        simulation = Simulation(MISSIONS[3])
+        move_to(simulation, *simulation.WAREHOUSE)
+        simulation.execute("pick_up", [])
+        move_to(simulation, 3, 2)
+        simulation.execute("drop", [])
+        simulation.execute("start_machine", [])
+        self.assertFalse(simulation.execute("machine_is_done", []))
+        simulation.execute("wait", [2])
+        self.assertFalse(simulation.execute("machine_is_done", []))
+        simulation.execute("wait", [1])
+        self.assertTrue(simulation.execute("machine_is_done", []))
+        simulation.execute("pick_up", [])
+        self.assertEqual(simulation.state.inventory, "plate")
+
     def test_full_module_chain(self):
         simulation = Simulation(MISSIONS[7])
         make_product(simulation, (3, 2), ["steel"])
         move_to(simulation, 4, 4)
-        simulation.execute("load_machine", [])
+        simulation.execute("drop", [])
         make_product(simulation, (3, 2), ["steel"])
         move_to(simulation, 5, 2)
-        simulation.execute("load_machine", [])
+        simulation.execute("drop", [])
         simulation.execute("start_machine", [])
         while not simulation.execute("machine_is_done", []):
             simulation.execute("wait", [])
-        simulation.execute("collect_output", [])
+        simulation.execute("pick_up", [])
         move_to(simulation, 4, 4)
-        simulation.execute("load_machine", [])
+        simulation.execute("drop", [])
         simulation.execute("start_machine", [])
         while not simulation.execute("machine_is_done", []):
             simulation.execute("wait", [])
-        simulation.execute("collect_output", [])
+        simulation.execute("pick_up", [])
         move_to(simulation, *simulation.SHIPPING)
         simulation.execute("drop", [])
         self.assertTrue(simulation.mission_complete())
@@ -93,10 +109,11 @@ class SaveTests(unittest.TestCase):
             store = SaveStore(Path(directory) / "save.json")
             state = store.load()
             state["credits"] = 420
-            state["projects"]["boot"] = {"main.py": "from paths import go\ngo()", "paths.py": "def go():\n    move(East)"}
+            state["projects"]["boot"] = {"main.py": "from paths import go\ngo()"}
+            state["shared_files"]["paths.py"] = "def go():\n    move(East)"
             store.save(state)
             self.assertEqual(store.load()["credits"], 420)
-            self.assertIn("paths.py", store.load()["projects"]["boot"])
+            self.assertIn("paths.py", store.load()["shared_files"])
 
     def test_version_one_save_is_migrated(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -105,6 +122,26 @@ class SaveTests(unittest.TestCase):
             state = SaveStore(path).load()
             self.assertEqual(state["version"], 2)
             self.assertEqual(state["projects"]["boot"]["main.py"], "move(East)")
+
+
+class ProjectTests(unittest.TestCase):
+    def test_helpers_survive_mission_change(self):
+        progress = {"projects": {}, "shared_files": {}}
+        store_mission_project(progress, "boot", {"main.py": "move(East)", "functions.py": "def go():\n    move(East)"})
+        next_project = load_mission_project(progress, "delivery", "pick_up()")
+        self.assertEqual(next_project["main.py"], "pick_up()")
+        self.assertIn("functions.py", next_project)
+
+    def test_legacy_helpers_from_current_mission_take_precedence(self):
+        progress = {
+            "projects": {
+                "old": {"main.py": "pass", "functions.py": "old = True"},
+                "current": {"main.py": "pass", "functions.py": "new = True"},
+            }
+        }
+        migrate_shared_files(progress, "current")
+        self.assertEqual(progress["shared_files"]["functions.py"], "new = True")
+        self.assertEqual(set(progress["projects"]["current"]), {"main.py"})
 
 
 if __name__ == "__main__":

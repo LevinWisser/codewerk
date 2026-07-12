@@ -19,6 +19,7 @@ python main.py
 - umbrochene, scrollbar dargestellte IntelliSense-Dokumentation und Syntaxfarben nach Symboltyp
 - frei verschiebbares und skalierbares Konsolenfenster mit automatischem Scrollen zur neuesten Ausgabe
 - mehrere Python-Dateien pro Auftrag mit Tabs und lokalen `import`-/`from ... import ...`-Anweisungen
+- tutorialweite Hilfsdateien: Module wie `functions.py` bleiben beim Wechsel der Aufgabe erhalten
 - separater Python-Worker mit eingeschraenkten Systemzugriffen
 - durchsuchbare, progressiv freigeschaltete Hilfe mit Codebeispielen
 - persistente Credits, Freischaltungen und Programme
@@ -47,6 +48,8 @@ go_east()
 ```
 
 Nur Dateien des aktuellen Spielprojekts koennen importiert werden. Externe Python-Pakete und Systemmodule bleiben aus Sicherheitsgruenden gesperrt.
+
+`pick_up()` nimmt sowohl aus dem Materiallager als auch aus fertigen Maschinen auf. `drop()` liefert je nach aktuellem Feld an eine Maschine oder den Versand. Maschinenrezepte und Verarbeitungszeiten stehen in der integrierten Hilfe.
 
 ## Ausfuehrungszustand
 

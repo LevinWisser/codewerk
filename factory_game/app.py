@@ -9,6 +9,7 @@ from factory_game.content import HELP, ITEM_NAMES, MISSIONS
 from factory_game.console import ConsoleWindow
 from factory_game.editor import ProjectEditor
 from factory_game.persistence import SaveStore
+from factory_game.projects import load_mission_project, migrate_shared_files, store_mission_project
 from factory_game.runtime import PythonRuntime
 from factory_game.simulation import GameError, Simulation
 
@@ -36,6 +37,7 @@ class FactoryGameApp:
         self.store = SaveStore()
         self.progress = self.store.load()
         self.mission_index = min(int(self.progress["mission"]), len(MISSIONS) - 1)
+        migrate_shared_files(self.progress, MISSIONS[self.mission_index].id)
         self.progress["unlocked"] = max(int(self.progress["unlocked"]), self.mission_index)
         self.simulation = Simulation(MISSIONS[self.mission_index])
         self.runtime = PythonRuntime()
@@ -150,7 +152,7 @@ class FactoryGameApp:
         mission = MISSIONS[index]
         self.simulation = Simulation(mission)
         self.completed_this_run = False
-        files = self.progress["projects"].get(mission.id, {"main.py": mission.starter_code})
+        files = load_mission_project(self.progress, mission.id, mission.starter_code)
         self.code_editor.set_files(files)
         self.brief_title.configure(text=mission.title)
         self.brief_text.configure(text=f"{mission.brief}\n\n{mission.concept}")
@@ -285,7 +287,7 @@ class FactoryGameApp:
         self.code_editor.highlight(filename, line, tag)
 
     def _store_current_project(self):
-        self.progress["projects"][MISSIONS[self.mission_index].id] = self.code_editor.get_files()
+        store_mission_project(self.progress, MISSIONS[self.mission_index].id, self.code_editor.get_files())
 
     def _show_console(self):
         self.console_window.show()

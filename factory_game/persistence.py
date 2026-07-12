@@ -11,7 +11,7 @@ class SaveStore:
         self.path = path or Path.home() / ".codewerk" / "save.json"
 
     def load(self) -> dict:
-        defaults = {"version": self.VERSION, "mission": 0, "unlocked": 0, "credits": 0, "projects": {}, "console_geometry": None}
+        defaults = {"version": self.VERSION, "mission": 0, "unlocked": 0, "credits": 0, "projects": {}, "shared_files": {}, "console_geometry": None}
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
             if data.get("version") == 1:
