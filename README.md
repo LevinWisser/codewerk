@@ -49,6 +49,8 @@ go_east()
 
 Nur Dateien des aktuellen Spielprojekts koennen importiert werden. Externe Python-Pakete und Systemmodule bleiben aus Sicherheitsgruenden gesperrt.
 
+Lokale Stern-Imports wie `from positions import *` sind erlaubt. Dabei gelten die normalen Python-Regeln: Namen, die mit einem Unterstrich beginnen, werden ohne explizites `__all__` nicht importiert.
+
 `pick_up()` nimmt sowohl aus dem Materiallager als auch aus fertigen Maschinen auf. `drop()` liefert je nach aktuellem Feld an eine Maschine oder den Versand. Maschinenrezepte und Verarbeitungszeiten stehen in der integrierten Hilfe.
 
 ## Ausfuehrungszustand

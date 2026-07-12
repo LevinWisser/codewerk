@@ -80,6 +80,8 @@ class SymbolCollector(ast.NodeVisitor):
 
     def visit_ImportFrom(self, node):
         for alias in node.names:
+            if alias.name == "*":
+                continue
             name = alias.asname or alias.name
             self.symbols[name] = f"import from {node.module}"
 

@@ -70,6 +70,16 @@ class WorkerTests(unittest.TestCase):
         self.read_until(process, "finished")
         process.wait(timeout=2)
 
+    def test_star_import_from_local_module(self):
+        process = self.start_project({
+            "main.py": "from positions import *\nprint(PRESS)",
+            "positions.py": "PRESS = (3, 2)",
+        })
+        log = self.read_until(process, "log")
+        self.assertEqual(log["text"], "(3, 2)\n")
+        self.read_until(process, "finished")
+        process.wait(timeout=2)
+
     def test_module_error_reports_filename(self):
         process = self.start_project({"main.py": "import paths", "paths.py": "move(Unknown)"})
         error = self.read_until(process, "error")

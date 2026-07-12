@@ -30,8 +30,6 @@ class Validator(ast.NodeVisitor):
     def visit_ImportFrom(self, node):
         if node.level or not node.module or node.module not in self.allowed_modules:
             raise ValueError("Nur absolute Imports aus lokalen Projektdateien sind erlaubt.")
-        if any(alias.name == "*" for alias in node.names):
-            raise ValueError("Stern-Imports sind nicht erlaubt. Importiere Namen explizit.")
 
     def visit_Name(self, node):
         if node.id in BLOCKED_NAMES or node.id.startswith("__"):
