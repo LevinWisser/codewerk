@@ -2,6 +2,8 @@
 
 CODEWERK ist ein spielbarer Vertical Slice eines 2D-Automatisierungsspiels. Eine Drohne wird mit echtem, kontrolliert ausgefuehrtem Python gesteuert, um eine Rasterfabrik zu versorgen und Produktionsauftraege zu erfuellen.
 
+Entwicklungsregeln und Architektur stehen in [AGENTS.md](AGENTS.md). Die Produktvision und geplanten Kapitel stehen in [docs/ROADMAP.md](docs/ROADMAP.md).
+
 ## Start
 
 Voraussetzung ist Python 3.11 oder neuer mit Tkinter. Es gibt keine externen Abhaengigkeiten.
