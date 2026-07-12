@@ -18,7 +18,7 @@ class PythonRuntime:
     def active(self) -> bool:
         return self.process is not None and self.process.poll() is None
 
-    def start(self, code: str) -> None:
+    def start(self, files: dict[str, str] | str) -> None:
         self.stop()
         worker = Path(__file__).resolve().parent.parent / "python_worker" / "worker.py"
         self.process = subprocess.Popen(
@@ -28,7 +28,9 @@ class PythonRuntime:
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         threading.Thread(target=self._read, daemon=True).start()
-        self.send({"type": "run", "code": code})
+        if isinstance(files, str):
+            files = {"main.py": files}
+        self.send({"type": "run", "entry": "main.py", "files": files})
 
     def _read(self) -> None:
         assert self.process and self.process.stdout

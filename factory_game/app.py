@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from factory_game.content import HELP, ITEM_NAMES, MISSIONS
+from factory_game.editor import ProjectEditor
 from factory_game.persistence import SaveStore
 from factory_game.runtime import PythonRuntime
 from factory_game.simulation import GameError, Simulation
@@ -117,15 +118,8 @@ class FactoryGameApp:
         speed_box = ttk.Combobox(editor_head, textvariable=self.speed, values=("0.5×", "1×", "2×", "4×"), state="readonly", width=5)
         speed_box.pack(side="right", padx=6)
 
-        editor_frame = tk.Frame(right, bg="#0d1218")
-        editor_frame.pack(fill="both", expand=True, padx=12)
-        self.editor = tk.Text(editor_frame, bg="#0d1218", fg="#dce5ec", insertbackground=ACCENT, selectbackground="#344b5f", relief="flat", undo=True, wrap="none", font=("Consolas", 11), padx=14, pady=12, tabs=(32,))
-        editor_scroll = ttk.Scrollbar(editor_frame, orient="vertical", command=self.editor.yview)
-        self.editor.configure(yscrollcommand=editor_scroll.set)
-        editor_scroll.pack(side="right", fill="y")
-        self.editor.pack(fill="both", expand=True)
-        self.editor.tag_configure("active", background="#263948")
-        self.editor.tag_configure("error", background="#5b2928", underline=True)
+        self.code_editor = ProjectEditor(right)
+        self.code_editor.pack(fill="both", expand=True, padx=12)
 
         console_head = tk.Frame(right, bg=PANEL)
         console_head.pack(fill="x", padx=12, pady=(9, 4))
@@ -146,16 +140,16 @@ class FactoryGameApp:
         self.mission_list.selection_set(self.mission_index)
 
     def _load_mission(self, index: int, save_current=True):
-        if save_current and hasattr(self, "editor"):
-            self.progress["codes"][MISSIONS[self.mission_index].id] = self.editor.get("1.0", "end-1c")
+        if save_current and hasattr(self, "code_editor"):
+            self._store_current_project()
         self.runtime.stop()
         self.pending_calls.clear()
         self.mission_index = index
         mission = MISSIONS[index]
         self.simulation = Simulation(mission)
         self.completed_this_run = False
-        self.editor.delete("1.0", "end")
-        self.editor.insert("1.0", self.progress["codes"].get(mission.id, mission.starter_code))
+        files = self.progress["projects"].get(mission.id, {"main.py": mission.starter_code})
+        self.code_editor.set_files(files)
         self.brief_title.configure(text=mission.title)
         self.brief_text.configure(text=f"{mission.brief}\n\n{mission.concept}")
         self.goal_label.configure(text="ZIEL\n" + mission.goal_text)
@@ -179,10 +173,9 @@ class FactoryGameApp:
         self.pending_calls.clear()
         self.completed_this_run = False
         self.paused = False
-        self.editor.tag_remove("active", "1.0", "end")
-        self.editor.tag_remove("error", "1.0", "end")
+        self.code_editor.clear_highlights()
         self._console("\n--- Programm gestartet ---\n", TEXT)
-        self.runtime.start(self.editor.get("1.0", "end-1c"))
+        self.runtime.start(self.code_editor.get_files())
         self.run_button.configure(text="■  STOP", command=self._stop_code)
         self._set_status("LAEUFT", GREEN)
         self._refresh()
@@ -215,7 +208,7 @@ class FactoryGameApp:
                 if kind == "call":
                     self.pending_calls.append(message)
                 elif kind == "line":
-                    self._highlight_line(int(message.get("line", 1)), "active")
+                    self._highlight_line(message.get("file", "main.py"), int(message.get("line", 1)), "active")
                 elif kind == "log":
                     self._console(message.get("text", ""), TEXT)
                 elif kind == "error":
@@ -244,8 +237,9 @@ class FactoryGameApp:
 
     def _runtime_error(self, message):
         line = int(message.get("line", 1))
-        self._highlight_line(line, "error")
-        self._console(f"FEHLER in Zeile {line}: {message.get('message')}\n", RED)
+        filename = message.get("file", "main.py")
+        self._highlight_line(filename, line, "error")
+        self._console(f"FEHLER in {filename}, Zeile {line}: {message.get('message')}\n", RED)
         self._stop_code()
         self._set_status("FEHLER", RED)
 
@@ -265,18 +259,18 @@ class FactoryGameApp:
             self.progress["credits"] = int(self.progress["credits"]) + mission.reward
             self.progress["unlocked"] = min(self.mission_index + 1, len(MISSIONS) - 1)
         self.progress["mission"] = min(self.mission_index + 1, len(MISSIONS) - 1)
-        self.progress["codes"][mission.id] = self.editor.get("1.0", "end-1c")
+        self._store_current_project()
         self.store.save(self.progress)
         self._console(f"AUFTRAG ERFUELLT  +{mission.reward} CREDITS\n", GREEN)
         self._set_status("ERFUELLT", GREEN)
         self._populate_missions()
         self.root.after(350, lambda: messagebox.showinfo("Auftrag erfuellt", f"{mission.title} abgeschlossen.\n\nBelohnung: {mission.reward} Credits"))
 
-    def _highlight_line(self, line, tag):
-        self.editor.tag_remove("active", "1.0", "end")
-        self.editor.tag_remove("error", "1.0", "end")
-        self.editor.tag_add(tag, f"{line}.0", f"{line}.end+1c")
-        self.editor.see(f"{line}.0")
+    def _highlight_line(self, filename, line, tag):
+        self.code_editor.highlight(filename, line, tag)
+
+    def _store_current_project(self):
+        self.progress["projects"][MISSIONS[self.mission_index].id] = self.code_editor.get_files()
 
     def _console(self, text, color=MUTED):
         self.console.configure(state="normal")
@@ -361,6 +355,7 @@ class FactoryGameApp:
         allowed = set()
         for i in range(self.mission_index + 1):
             allowed.update(MISSIONS[i].unlocked_docs)
+        allowed.add("files")
         if "all" in allowed:
             allowed = set(HELP)
 
@@ -394,7 +389,7 @@ class FactoryGameApp:
 
     def _close(self):
         self.progress["mission"] = self.mission_index
-        self.progress["codes"][MISSIONS[self.mission_index].id] = self.editor.get("1.0", "end-1c")
+        self._store_current_project()
         self.store.save(self.progress)
         self.runtime.stop()
         self.root.destroy()

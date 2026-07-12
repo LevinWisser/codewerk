@@ -93,10 +93,18 @@ class SaveTests(unittest.TestCase):
             store = SaveStore(Path(directory) / "save.json")
             state = store.load()
             state["credits"] = 420
-            state["codes"]["boot"] = "move(East)"
+            state["projects"]["boot"] = {"main.py": "from paths import go\ngo()", "paths.py": "def go():\n    move(East)"}
             store.save(state)
             self.assertEqual(store.load()["credits"], 420)
-            self.assertEqual(store.load()["codes"]["boot"], "move(East)")
+            self.assertIn("paths.py", store.load()["projects"]["boot"])
+
+    def test_version_one_save_is_migrated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "save.json"
+            path.write_text('{"version": 1, "mission": 2, "unlocked": 2, "credits": 50, "codes": {"boot": "move(East)"}}', encoding="utf-8")
+            state = SaveStore(path).load()
+            self.assertEqual(state["version"], 2)
+            self.assertEqual(state["projects"]["boot"]["main.py"], "move(East)")
 
 
 if __name__ == "__main__":

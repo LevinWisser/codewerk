@@ -45,4 +45,5 @@ HELP = {
     "machine_is_done": ("machine_is_done()", "Ist True, wenn die Maschine ein fertiges Produkt bereithaelt.", "while not machine_is_done():\n    wait()"),
     "wait": ("wait(ticks=1)", "Laesst Simulationsticks verstreichen, damit Maschinen arbeiten.", "wait(3)"),
     "all": ("API-Uebersicht", "Im Abschlussauftrag stehen alle bisher erlernten Befehle zur Verfuegung.", "x, y = get_position()"),
+    "files": ("Dateien und Imports", "Lege ueber + weitere Python-Dateien an. main.py ist der Einstieg. Lokale Module koennen normal importiert werden; externe Pakete bleiben gesperrt.", "# functions.py\ndef go_east():\n    move(East)\n\n# main.py\nfrom functions import go_east\ngo_east()"),
 }
