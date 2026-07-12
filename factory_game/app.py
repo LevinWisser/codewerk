@@ -114,6 +114,8 @@ class FactoryGameApp:
         self.pause_button.pack(side="right", padx=5)
         self.step_button = ttk.Button(editor_head, text="›|", style="Tool.TButton", command=self._step, width=3)
         self.step_button.pack(side="right")
+        self.reset_button = ttk.Button(editor_head, text="↻", style="Tool.TButton", command=self._reset_mission_state, width=3)
+        self.reset_button.pack(side="right", padx=(5, 0))
         self.speed = tk.StringVar(value="1×")
         speed_box = ttk.Combobox(editor_head, textvariable=self.speed, values=("0.5×", "1×", "2×", "4×"), state="readonly", width=5)
         speed_box.pack(side="right", padx=6)
@@ -169,7 +171,6 @@ class FactoryGameApp:
             self.mission_list.selection_set(self.mission_index)
 
     def _run_code(self):
-        self.simulation.reset()
         self.pending_calls.clear()
         self.completed_this_run = False
         self.paused = False
@@ -178,6 +179,20 @@ class FactoryGameApp:
         self.runtime.start(self.code_editor.get_files())
         self.run_button.configure(text="■  STOP", command=self._stop_code)
         self._set_status("LAEUFT", GREEN)
+        self._refresh()
+
+    def _reset_mission_state(self):
+        self.runtime.stop()
+        self.pending_calls.clear()
+        self.simulation.reset()
+        self.completed_this_run = False
+        self.paused = False
+        self.step_requested = False
+        self.pause_button.configure(text="Ⅱ")
+        self.run_button.configure(text="▶  START", command=self._run_code)
+        self.code_editor.clear_highlights()
+        self._console("\n--- Auftrag zurueckgesetzt ---\n", MUTED)
+        self._set_status("ZURUECKGESETZT", MUTED)
         self._refresh()
 
     def _stop_code(self):

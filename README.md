@@ -16,6 +16,7 @@ python main.py
 - Materiallager, Presse, Fraese, Montage und Versand
 - integrierter Python-Editor mit Start, Pause, Einzelschritt und Tempo
 - IntelliSense fuer Spielbefehle, Python-Schluesselwoerter, Variablen und eigene Funktionen (`Ctrl+Leertaste`)
+- umbrochene, scrollbar dargestellte IntelliSense-Dokumentation und Syntaxfarben nach Symboltyp
 - mehrere Python-Dateien pro Auftrag mit Tabs und lokalen `import`-/`from ... import ...`-Anweisungen
 - separater Python-Worker mit eingeschraenkten Systemzugriffen
 - durchsuchbare, progressiv freigeschaltete Hilfe mit Codebeispielen
@@ -45,3 +46,7 @@ go_east()
 ```
 
 Nur Dateien des aktuellen Spielprojekts koennen importiert werden. Externe Python-Pakete und Systemmodule bleiben aus Sicherheitsgruenden gesperrt.
+
+## Ausfuehrungszustand
+
+Ein erneuter Start setzt die Fabrik nicht zurueck. Das naechste Programm arbeitet mit der aktuellen Position, Maschinenbelegung und Lieferung weiter. Der `↻`-Button setzt den laufenden Auftrag bewusst auf seinen Anfangszustand zurueck; der Quellcode bleibt erhalten.

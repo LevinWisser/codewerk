@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import ast
+import io
 import keyword
 import re
 import tkinter as tk
+import tokenize
 from tkinter import messagebox, simpledialog, ttk
 
 from factory_game.content import HELP
@@ -14,6 +16,17 @@ EDITOR_FG = "#dce5ec"
 PANEL = "#19212b"
 ACCENT = "#efb341"
 MUTED = "#94a3b1"
+
+SYNTAX_COLORS = {
+    "keyword": "#c678dd",
+    "api": "#56b6c2",
+    "function": "#61afef",
+    "builtin": "#e5c07b",
+    "constant": "#e06c75",
+    "string": "#98c379",
+    "number": "#d19a66",
+    "comment": "#6f7f8c",
+}
 
 API_COMPLETIONS = {
     "move": "move(direction) - Drohne ein Feld bewegen",
@@ -83,7 +96,10 @@ class ProjectEditor(tk.Frame):
         self.popup: tk.Toplevel | None = None
         self.popup_list: tk.Listbox | None = None
         self.matches: list[str] = []
+        self.completion_symbols: dict[str, str] = {}
+        self.popup_detail: tk.Text | None = None
         self.completion_start = "insert"
+        self.highlight_jobs: dict[tk.Text, str] = {}
 
         bar = tk.Frame(self, bg=PANEL)
         bar.pack(fill="x", pady=(0, 5))
@@ -164,16 +180,18 @@ class ProjectEditor(tk.Frame):
         editor.insert("1.0", source)
         editor.tag_configure("active", background="#263948")
         editor.tag_configure("error", background="#5b2928", underline=True)
+        for kind, color in SYNTAX_COLORS.items():
+            editor.tag_configure(f"syntax_{kind}", foreground=color)
         editor.bind("<KeyRelease>", lambda event, widget=editor: self._on_key_release(event, widget))
         editor.bind("<Control-space>", lambda event, widget=editor: self._show_completion(widget, explicit=True))
         editor.bind("<Escape>", lambda _event: self._hide_completion())
-        editor.bind("<FocusOut>", lambda _event: self.after(100, self._hide_completion))
         editor.bind("<Tab>", lambda _event, widget=editor: self._completion_accept_key(widget))
         editor.bind("<Return>", lambda _event, widget=editor: self._completion_accept_key(widget))
         editor.bind("<Down>", lambda _event: self._completion_move_key(1))
         editor.bind("<Up>", lambda _event: self._completion_move_key(-1))
         self.notebook.add(frame, text=name)
         self.editors[name] = editor
+        self.after_idle(lambda widget=editor: self._apply_syntax_highlighting(widget))
 
     def _changed(self) -> None:
         if self.on_change:
@@ -181,6 +199,10 @@ class ProjectEditor(tk.Frame):
 
     def _on_key_release(self, event, editor):
         self._changed()
+        previous = self.highlight_jobs.get(editor)
+        if previous:
+            self.after_cancel(previous)
+        self.highlight_jobs[editor] = self.after(90, lambda widget=editor: self._apply_syntax_highlighting(widget))
         if event.keysym in {"Up", "Down", "Return", "Tab", "Escape"}:
             return
         line = editor.get("insert linestart", "insert")
@@ -219,6 +241,7 @@ class ProjectEditor(tk.Frame):
             self._hide_completion()
             return "break"
         symbols = self._symbols()
+        self.completion_symbols = symbols
         self.matches = sorted(name for name in symbols if name.startswith(prefix) and name != prefix)
         if not self.matches:
             return "break"
@@ -226,16 +249,81 @@ class ProjectEditor(tk.Frame):
         popup = tk.Toplevel(self)
         popup.overrideredirect(True)
         popup.attributes("-topmost", True)
-        listing = tk.Listbox(popup, bg="#202b36", fg=EDITOR_FG, selectbackground="#3c5265", selectforeground="white", relief="solid", borderwidth=1, highlightthickness=0, font=("Consolas", 10), width=54, height=min(8, len(self.matches)), activestyle="none")
+        container = tk.Frame(popup, bg="#202b36", highlightbackground="#536271", highlightthickness=1)
+        container.pack(fill="both", expand=True)
+        listing = tk.Listbox(container, bg="#202b36", fg=EDITOR_FG, selectbackground="#3c5265", selectforeground="white", relief="flat", borderwidth=0, highlightthickness=0, font=("Consolas", 10), width=31, height=min(9, max(4, len(self.matches))), activestyle="none", exportselection=False)
         for name in self.matches:
-            listing.insert("end", f"{name:<24} {symbols[name]}")
+            kind, color = self._completion_kind(name, symbols[name])
+            listing.insert("end", f"{name:<20} {kind}")
+            listing.itemconfig("end", fg=color)
         listing.selection_set(0)
-        listing.pack()
+        listing.pack(side="left", fill="both")
+        separator = tk.Frame(container, bg="#536271", width=1)
+        separator.pack(side="left", fill="y")
+        detail_frame = tk.Frame(container, bg="#182129", padx=14, pady=11, width=330)
+        detail_frame.pack(side="left", fill="both", expand=True)
+        detail_frame.pack_propagate(False)
+        detail_scroll = ttk.Scrollbar(detail_frame, orient="vertical")
+        self.popup_detail = tk.Text(detail_frame, bg="#182129", fg=EDITOR_FG, relief="flat", borderwidth=0, highlightthickness=0, wrap="word", font=("Segoe UI", 10), cursor="arrow", yscrollcommand=detail_scroll.set, padx=0, pady=0)
+        detail_scroll.configure(command=self.popup_detail.yview)
+        detail_scroll.pack(side="right", fill="y")
+        self.popup_detail.pack(side="left", fill="both", expand=True)
+        self.popup_detail.tag_configure("kind", font=("Segoe UI Semibold", 8), spacing3=3)
+        self.popup_detail.tag_configure("name", font=("Consolas", 12, "bold"), foreground=EDITOR_FG, spacing3=9)
+        self.popup_detail.tag_configure("body", font=("Segoe UI", 10), foreground=EDITOR_FG, spacing3=7)
         bbox = editor.bbox("insert") or (10, 10, 0, 18)
-        popup.geometry(f"+{editor.winfo_rootx() + bbox[0]}+{editor.winfo_rooty() + bbox[1] + bbox[3] + 2}")
-        listing.bind("<ButtonRelease-1>", lambda _event: self._accept_completion(editor))
+        popup_width = 670
+        popup_height = max(150, min(250, 31 * min(9, max(4, len(self.matches)))))
+        x = editor.winfo_rootx() + bbox[0]
+        y = editor.winfo_rooty() + bbox[1] + bbox[3] + 2
+        screen_width, screen_height = editor.winfo_screenwidth(), editor.winfo_screenheight()
+        x = max(8, min(x, screen_width - popup_width - 8))
+        if y + popup_height > screen_height - 40:
+            y = max(8, editor.winfo_rooty() + bbox[1] - popup_height - 2)
+        popup.geometry(f"{popup_width}x{popup_height}+{x}+{y}")
+        listing.bind("<<ListboxSelect>>", lambda _event: self._update_completion_detail())
+        listing.bind("<Double-Button-1>", lambda _event: self._accept_completion(editor))
         self.popup, self.popup_list = popup, listing
+        self._update_completion_detail()
         return "break"
+
+    def _completion_kind(self, name, description):
+        if name in API_COMPLETIONS:
+            return "Spiel-API", SYNTAX_COLORS["api"]
+        if keyword.iskeyword(name):
+            return "Keyword", SYNTAX_COLORS["keyword"]
+        if name in BUILTIN_COMPLETIONS:
+            return "Built-in", SYNTAX_COLORS["builtin"]
+        if description.startswith("function"):
+            return "Funktion", SYNTAX_COLORS["function"]
+        if description.startswith("class"):
+            return "Klasse", SYNTAX_COLORS["constant"]
+        if "module" in description:
+            return "Modul", SYNTAX_COLORS["constant"]
+        if description.startswith("parameter"):
+            return "Parameter", EDITOR_FG
+        return "Variable", EDITOR_FG
+
+    def _update_completion_detail(self):
+        if not self.popup_list or not self.popup_detail:
+            return
+        selection = self.popup_list.curselection()
+        if not selection:
+            return
+        name = self.matches[selection[0]]
+        description = self.completion_symbols[name]
+        kind, color = self._completion_kind(name, description)
+        detail = description
+        if name in HELP:
+            signature, explanation, example = HELP[name]
+            detail = f"{signature}\n\n{explanation}\n\nBeispiel:\n{example}"
+        self.popup_detail.configure(state="normal")
+        self.popup_detail.delete("1.0", "end")
+        self.popup_detail.tag_configure("kind", foreground=color)
+        self.popup_detail.insert("end", kind.upper() + "\n", "kind")
+        self.popup_detail.insert("end", name + "\n", "name")
+        self.popup_detail.insert("end", detail, "body")
+        self.popup_detail.configure(state="disabled")
 
     def _completion_accept_key(self, editor):
         if self.popup_list:
@@ -254,6 +342,7 @@ class ProjectEditor(tk.Frame):
         self.popup_list.selection_clear(0, "end")
         self.popup_list.selection_set(index)
         self.popup_list.see(index)
+        self._update_completion_detail()
         return "break"
 
     def _accept_completion(self, editor):
@@ -276,7 +365,50 @@ class ProjectEditor(tk.Frame):
                 pass
         self.popup = None
         self.popup_list = None
+        self.popup_detail = None
         self.matches = []
+        self.completion_symbols = {}
+
+    def _apply_syntax_highlighting(self, editor):
+        self.highlight_jobs.pop(editor, None)
+        for kind in SYNTAX_COLORS:
+            editor.tag_remove(f"syntax_{kind}", "1.0", "end")
+        source = editor.get("1.0", "end-1c")
+        try:
+            tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
+        except (tokenize.TokenError, IndentationError):
+            tokens = []
+            generator = tokenize.generate_tokens(io.StringIO(source).readline)
+            try:
+                while True:
+                    tokens.append(next(generator))
+            except (StopIteration, tokenize.TokenError, IndentationError):
+                pass
+        ignored = {tokenize.ENCODING, tokenize.ENDMARKER, tokenize.NEWLINE, tokenize.NL, tokenize.INDENT, tokenize.DEDENT}
+        meaningful = [token for token in tokens if token.type not in ignored]
+        for index, token in enumerate(meaningful):
+            kind = None
+            if token.type == tokenize.COMMENT:
+                kind = "comment"
+            elif token.type == tokenize.STRING:
+                kind = "string"
+            elif token.type == tokenize.NUMBER:
+                kind = "number"
+            elif token.type == tokenize.NAME:
+                previous = meaningful[index - 1].string if index else ""
+                following = meaningful[index + 1].string if index + 1 < len(meaningful) else ""
+                if keyword.iskeyword(token.string):
+                    kind = "keyword"
+                elif token.string in API_COMPLETIONS:
+                    kind = "api" if token.string not in {"North", "East", "South", "West"} else "constant"
+                elif token.string in BUILTIN_COMPLETIONS:
+                    kind = "builtin"
+                elif previous in {"def", "class"} or following == "(":
+                    kind = "function"
+            if kind:
+                start = f"{token.start[0]}.{token.start[1]}"
+                end = f"{token.end[0]}.{token.end[1]}"
+                editor.tag_add(f"syntax_{kind}", start, end)
 
     def clear_highlights(self):
         for editor in self.editors.values():
