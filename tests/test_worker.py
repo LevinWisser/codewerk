@@ -86,6 +86,20 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(error["file"], "paths.py")
         self.assertEqual(error["line"], 1)
 
+    def test_contract_api_can_drive_acceptance(self):
+        process = self.start_worker("requests = get_requests()\nfor request_id in requests:\n    accept_request(request_id)\n    break")
+        call = self.read_until(process, "call")
+        self.assertEqual(call["command"], "get_requests")
+        process.stdin.write(json.dumps({"type": "result", "id": call["id"], "ok": True, "value": {"REQ-0001": {"product": "plate"}}}) + "\n")
+        process.stdin.flush()
+        call = self.read_until(process, "call")
+        self.assertEqual(call["command"], "accept_request")
+        self.assertEqual(call["args"], ["REQ-0001"])
+        process.stdin.write(json.dumps({"type": "result", "id": call["id"], "ok": True, "value": None}) + "\n")
+        process.stdin.flush()
+        self.read_until(process, "finished")
+        process.wait(timeout=2)
+
 
 if __name__ == "__main__":
     unittest.main()

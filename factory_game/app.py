@@ -5,9 +5,10 @@ import time
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from factory_game.content import HELP, ITEM_NAMES, MISSIONS
+from factory_game.content import FACTORY_MACHINE_DEFINITIONS, HELP, ITEM_NAMES, MISSIONS
 from factory_game.console import ConsoleWindow
 from factory_game.editor import ProjectEditor
+from factory_game.factory import FactorySimulation
 from factory_game.persistence import SaveStore
 from factory_game.projects import load_mission_project, migrate_shared_files, store_mission_project
 from factory_game.runtime import PythonRuntime
@@ -39,7 +40,14 @@ class FactoryGameApp:
         self.mission_index = min(int(self.progress["mission"]), len(MISSIONS) - 1)
         migrate_shared_files(self.progress, MISSIONS[self.mission_index].id)
         self.progress["unlocked"] = max(int(self.progress["unlocked"]), self.mission_index)
+        self.mode = "tutorial"
         self.simulation = Simulation(MISSIONS[self.mission_index])
+        self.factory_simulation: FactorySimulation | None = None
+        self.build_kind: str | None = None
+        self.moving_machine: tuple[int, int] | None = None
+        self.selected_machine: tuple[int, int] | None = None
+        self.build_window: tk.Toplevel | None = None
+        self.grid_geometry = (0.0, 0.0, 1.0)
         self.runtime = PythonRuntime()
         self.pending_calls: list[dict] = []
         self.paused = False
@@ -48,7 +56,10 @@ class FactoryGameApp:
         self.completed_this_run = False
         self._configure_style()
         self._build_ui()
-        self._load_mission(self.mission_index, save_current=False)
+        if self.progress.get("tutorial_complete") and self.progress.get("mode") == "factory":
+            self._load_factory(save_current=False)
+        else:
+            self._load_mission(self.mission_index, save_current=False)
         self.root.protocol("WM_DELETE_WINDOW", self._close)
         self.root.after(20, self._poll_runtime)
 
@@ -75,6 +86,7 @@ class FactoryGameApp:
         self.credit_label = tk.Label(top, bg="#0c1117", fg=TEXT, font=("Consolas", 11))
         self.credit_label.pack(side="right", padx=18)
         ttk.Button(top, text="HILFE", style="Tool.TButton", command=self._open_help).pack(side="right", padx=5, pady=10)
+        self.build_button = ttk.Button(top, text="BAUEN", style="Tool.TButton", command=self._open_build_window)
 
         body = tk.PanedWindow(self.root, orient="horizontal", bg=BG, sashwidth=5, sashrelief="flat")
         body.pack(fill="both", expand=True)
@@ -94,6 +106,7 @@ class FactoryGameApp:
         self.goal_label.pack(fill="x", padx=12)
         self.stats_label = tk.Label(left, bg=PANEL, fg=MUTED, font=("Consolas", 9), justify="left")
         self.stats_label.pack(anchor="w", padx=16, pady=15)
+        self._build_factory_panel(left)
 
         center = tk.Frame(body, bg=BG)
         body.add(center, minsize=450)
@@ -105,6 +118,7 @@ class FactoryGameApp:
         self.canvas = tk.Canvas(center, bg="#0f151b", highlightthickness=0)
         self.canvas.pack(fill="both", expand=True, padx=14, pady=(0, 14))
         self.canvas.bind("<Configure>", lambda _event: self._draw_world())
+        self.canvas.bind("<Button-1>", self._on_canvas_click)
 
         right = tk.Frame(body, bg=PANEL, width=470)
         body.add(right, minsize=380, width=470)
@@ -132,22 +146,63 @@ class FactoryGameApp:
         ttk.Button(console_bar, text="KONSOLE  ↗", style="Tool.TButton", command=self._show_console).pack(side="right")
         self.console_window = ConsoleWindow(self.root, self.progress.get("console_geometry"))
 
+    def _build_factory_panel(self, parent):
+        self.factory_panel = tk.Frame(parent, bg=PANEL)
+        tk.Label(self.factory_panel, text="HAUPTFABRIK", bg=PANEL, fg=ACCENT, font=("Segoe UI Semibold", 14)).pack(anchor="w", padx=14, pady=(16, 2))
+        self.factory_progress_label = tk.Label(self.factory_panel, bg=PANEL, fg=MUTED, justify="left", font=("Segoe UI", 9))
+        self.factory_progress_label.pack(anchor="w", padx=14, pady=(0, 12))
+
+        tk.Label(self.factory_panel, text="ANFRAGEN", bg=PANEL, fg=TEXT, font=("Segoe UI Semibold", 9)).pack(anchor="w", padx=14)
+        request_frame = tk.Frame(self.factory_panel, bg="#131a22")
+        request_frame.pack(fill="x", padx=10, pady=(5, 5))
+        request_scroll = ttk.Scrollbar(request_frame, orient="vertical")
+        self.request_list = tk.Listbox(request_frame, bg="#131a22", fg=TEXT, selectbackground="#344454", borderwidth=0, highlightthickness=0, font=("Consolas", 8), height=9, exportselection=False, yscrollcommand=request_scroll.set)
+        request_scroll.configure(command=self.request_list.yview)
+        request_scroll.pack(side="right", fill="y")
+        self.request_list.pack(side="left", fill="both", expand=True)
+        request_actions = tk.Frame(self.factory_panel, bg=PANEL)
+        request_actions.pack(fill="x", padx=10)
+        ttk.Button(request_actions, text="ANNEHMEN", style="Tool.TButton", command=self._accept_selected_request).pack(side="left", fill="x", expand=True)
+        ttk.Button(request_actions, text="ABLEHNEN", style="Tool.TButton", command=self._reject_selected_request).pack(side="left", fill="x", expand=True, padx=(5, 0))
+
+        tk.Label(self.factory_panel, text="AKTIVE AUFTRAEGE", bg=PANEL, fg=TEXT, font=("Segoe UI Semibold", 9)).pack(anchor="w", padx=14, pady=(16, 0))
+        order_frame = tk.Frame(self.factory_panel, bg="#131a22")
+        order_frame.pack(fill="x", padx=10, pady=(5, 8))
+        order_scroll = ttk.Scrollbar(order_frame, orient="vertical")
+        self.order_list = tk.Listbox(order_frame, bg="#131a22", fg=TEXT, selectbackground="#344454", borderwidth=0, highlightthickness=0, font=("Consolas", 8), height=7, exportselection=False, yscrollcommand=order_scroll.set)
+        order_scroll.configure(command=self.order_list.yview)
+        order_scroll.pack(side="right", fill="y")
+        self.order_list.pack(side="left", fill="both", expand=True)
+        self.factory_stock_label = tk.Label(self.factory_panel, bg=PANEL, fg=MUTED, justify="left", wraplength=215, font=("Consolas", 8))
+        self.factory_stock_label.pack(anchor="w", padx=14, pady=(4, 10))
+        ttk.Button(self.factory_panel, text="TUTORIALS", style="Tool.TButton", command=lambda: self._load_mission(7)).pack(side="bottom", fill="x", padx=10, pady=10)
+        self.factory_panel.place_forget()
+
     def _populate_missions(self):
         self.mission_list.delete(0, "end")
         unlocked = int(self.progress["unlocked"])
+        completed = set(self.progress.get("completed_tutorial_missions", []))
         for index, mission in enumerate(MISSIONS):
-            prefix = "✓" if index < unlocked else ("◆" if index == self.mission_index else "·")
+            prefix = "✓" if index in completed or index < unlocked else ("◆" if index == self.mission_index else "·")
             title = mission.title if index <= unlocked else f"{index + 1:02d}  Gesperrt"
             self.mission_list.insert("end", f" {prefix}  {title}")
             if index > unlocked:
                 self.mission_list.itemconfig(index, fg="#596673")
-        self.mission_list.selection_set(self.mission_index)
+        if self.progress.get("tutorial_complete"):
+            self.mission_list.insert("end", " ◆  09  Hauptfabrik")
+        if self.mode == "tutorial":
+            self.mission_list.selection_set(self.mission_index)
 
     def _load_mission(self, index: int, save_current=True):
         if save_current and hasattr(self, "code_editor"):
-            self._store_current_project()
+            self._save_current_context()
         self.runtime.stop()
         self.pending_calls.clear()
+        self.mode = "tutorial"
+        self.progress["mode"] = "tutorial"
+        self.factory_panel.place_forget()
+        self.build_button.pack_forget()
+        self.reset_button.configure(state="normal")
         self.mission_index = index
         mission = MISSIONS[index]
         self.simulation = Simulation(mission)
@@ -166,11 +221,38 @@ class FactoryGameApp:
         if not selection:
             return
         index = selection[0]
+        if index == len(MISSIONS) and self.progress.get("tutorial_complete"):
+            self._load_factory()
+            return
         if index <= int(self.progress["unlocked"]) and index != self.mission_index:
             self._load_mission(index)
         elif index > int(self.progress["unlocked"]):
             self.mission_list.selection_clear(0, "end")
             self.mission_list.selection_set(self.mission_index)
+
+    def _load_factory(self, save_current=True):
+        if not self.progress.get("tutorial_complete"):
+            return
+        if save_current and hasattr(self, "code_editor"):
+            self._save_current_context()
+        self.runtime.stop()
+        self.pending_calls.clear()
+        self.mode = "factory"
+        self.progress["mode"] = "factory"
+        if self.factory_simulation is None:
+            self.factory_simulation = FactorySimulation.from_save_data(self.progress.get("factory_state"), int(self.progress["credits"]))
+        self.simulation = self.factory_simulation
+        self.completed_this_run = False
+        files = load_mission_project(self.progress, "factory", "")
+        self.code_editor.set_files(files)
+        self.factory_panel.place(x=0, y=0, relwidth=1, relheight=1)
+        self.factory_panel.lift()
+        if not self.build_button.winfo_ismapped():
+            self.build_button.pack(side="right", padx=5, pady=10)
+        self.reset_button.configure(state="disabled")
+        self._set_status("HAUPTFABRIK", ACCENT)
+        self._populate_missions()
+        self._refresh()
 
     def _run_code(self):
         self.pending_calls.clear()
@@ -247,7 +329,9 @@ class FactoryGameApp:
             value = self.simulation.execute(message["command"], message.get("args", []))
             self.runtime.send({"type": "result", "id": message["id"], "ok": True, "value": value})
             self._refresh()
-            if self.simulation.mission_complete() and not self.completed_this_run:
+            if self.mode == "factory":
+                self._save_factory_state()
+            elif self.simulation.mission_complete() and not self.completed_this_run:
                 self._complete_mission()
         except (GameError, TypeError) as error:
             self.runtime.send({"type": "result", "id": message["id"], "ok": False, "error": str(error)})
@@ -261,6 +345,11 @@ class FactoryGameApp:
         self._set_status("FEHLER", RED)
 
     def _program_finished(self):
+        if self.mode == "factory":
+            self._console("Programm beendet. Die Hauptfabrik behaelt ihren aktuellen Zustand.\n", MUTED)
+            self._stop_code()
+            self._save_factory_state()
+            return
         if not self.completed_this_run:
             self._console("Programm beendet. Das Auftragsziel ist noch nicht erreicht.\n", MUTED)
             self._stop_code()
@@ -272,22 +361,47 @@ class FactoryGameApp:
         self.run_button.configure(text="▶  START", command=self._run_code)
         mission = MISSIONS[self.mission_index]
         previous_unlocked = int(self.progress["unlocked"])
-        if self.mission_index >= previous_unlocked:
+        completed = self.progress.setdefault("completed_tutorial_missions", [])
+        if self.mission_index not in completed:
             self.progress["credits"] = int(self.progress["credits"]) + mission.reward
             self.progress["unlocked"] = min(self.mission_index + 1, len(MISSIONS) - 1)
         self.progress["mission"] = min(self.mission_index + 1, len(MISSIONS) - 1)
+        if self.mission_index not in completed:
+            completed.append(self.mission_index)
+        if self.mission_index == len(MISSIONS) - 1:
+            self.progress["tutorial_complete"] = True
         self._store_current_project()
         self.store.save(self.progress)
         self._console(f"AUFTRAG ERFUELLT  +{mission.reward} CREDITS\n", GREEN)
         self._set_status("ERFUELLT", GREEN)
         self._populate_missions()
-        self.root.after(350, lambda: messagebox.showinfo("Auftrag erfuellt", f"{mission.title} abgeschlossen.\n\nBelohnung: {mission.reward} Credits"))
+        def show_completion():
+            messagebox.showinfo("Auftrag erfuellt", f"{mission.title} abgeschlossen.\n\nBelohnung: {mission.reward} Credits")
+            if self.mission_index == len(MISSIONS) - 1:
+                self._load_factory()
+        self.root.after(350, show_completion)
 
     def _highlight_line(self, filename, line, tag):
         self.code_editor.highlight(filename, line, tag)
 
     def _store_current_project(self):
-        store_mission_project(self.progress, MISSIONS[self.mission_index].id, self.code_editor.get_files())
+        project_id = "factory" if self.mode == "factory" else MISSIONS[self.mission_index].id
+        store_mission_project(self.progress, project_id, self.code_editor.get_files())
+
+    def _save_factory_state(self):
+        if self.factory_simulation is None:
+            return
+        self.progress["factory_state"] = self.factory_simulation.to_save_data()
+        self.progress["credits"] = self.factory_simulation.credits
+        if self.factory_simulation.chapter_complete and not self.progress.get("chapter_1_complete"):
+            self.progress["chapter_1_complete"] = True
+            self.root.after(100, lambda: messagebox.showinfo("Kapitel abgeschlossen", "Auftragsfertigung abgeschlossen.\n\nDie Halle wurde auf 12 × 12 erweitert. Kapitel 2 wird in einer spaeteren Version fortgesetzt."))
+        self.store.save(self.progress)
+
+    def _save_current_context(self):
+        self._store_current_project()
+        if self.mode == "factory":
+            self._save_factory_state()
 
     def _show_console(self):
         self.console_window.show()
@@ -301,10 +415,189 @@ class FactoryGameApp:
     def _refresh(self):
         state = self.simulation.state
         inventory = ITEM_NAMES.get(state.inventory, "leer")
-        delivered = sum(state.delivered.values())
-        self.stats_label.configure(text=f"POSITION   {state.drone_x}, {state.drone_y}\nLADUNG     {inventory}\nTICKS      {state.ticks}\nVERSAND    {delivered}")
-        self.credit_label.configure(text=f"{int(self.progress['credits']):05d}  CR")
+        if self.mode == "factory":
+            delivered = sum(self.factory_simulation.shipping_inventory.values())
+            self.stats_label.configure(text=f"POSITION   {state.drone_x}, {state.drone_y}\nLADUNG     {inventory}\nTICKS      {state.ticks}\nVERSAND    {delivered}")
+            self.credit_label.configure(text=f"{self.factory_simulation.credits:05d}  CR")
+            self._refresh_factory_panel()
+        else:
+            delivered = sum(state.delivered.values())
+            self.stats_label.configure(text=f"POSITION   {state.drone_x}, {state.drone_y}\nLADUNG     {inventory}\nTICKS      {state.ticks}\nVERSAND    {delivered}")
+            self.credit_label.configure(text=f"{int(self.progress['credits']):05d}  CR")
         self._draw_world()
+
+    def _refresh_factory_panel(self):
+        if self.factory_simulation is None:
+            return
+        factory = self.factory_simulation
+        self.factory_progress_label.configure(text=f"Kapitel 1  ·  Technik {factory.technology_level}/4\nAuftraege {factory.completed_count}/12")
+        self.request_ids = list(factory.requests)
+        self.request_list.delete(0, "end")
+        for request_id in self.request_ids:
+            request = factory.requests[request_id]
+            product = ITEM_NAMES.get(request["product"], request["product"])
+            total = request["base_payout"] + request["on_time_bonus"]
+            self.request_list.insert("end", f"{request_id}  {request['quantity']}x {product[:12]}  {total} CR")
+        self.order_ids = list(factory.orders)
+        self.order_list.delete(0, "end")
+        orders = factory.get_orders()
+        for order_id in self.order_ids:
+            order = orders[order_id]
+            product = ITEM_NAMES.get(order["product"], order["product"])
+            deadline = f"T-{order['ticks_left']}" if order["ticks_left"] else "SPAET"
+            self.order_list.insert("end", f"{order_id}  {order['quantity']}x {product[:11]}  {deadline}")
+            if not order["ticks_left"]:
+                self.order_list.itemconfig("end", fg=RED)
+        input_text = ", ".join(f"{ITEM_NAMES.get(item, item)}:{amount}" for item, amount in factory.input_inventory.items() if amount) or "leer"
+        shipping_text = ", ".join(f"{ITEM_NAMES.get(item, item)}:{amount}" for item, amount in factory.shipping_inventory.items() if amount) or "leer"
+        self.factory_stock_label.configure(text=f"EINGANG  {input_text}\nVERSAND  {shipping_text}")
+        self._refresh_build_window()
+
+    def _selected_request_id(self):
+        selection = self.request_list.curselection()
+        return self.request_ids[selection[0]] if selection and selection[0] < len(self.request_ids) else None
+
+    def _accept_selected_request(self):
+        request_id = self._selected_request_id()
+        if request_id:
+            self._factory_ui_command("accept_request", [request_id])
+
+    def _reject_selected_request(self):
+        request_id = self._selected_request_id()
+        if request_id:
+            self._factory_ui_command("reject_request", [request_id])
+
+    def _factory_ui_command(self, command, args):
+        if self.factory_simulation is None:
+            return
+        try:
+            result = self.factory_simulation.execute(command, args)
+            self._console(f"UI: {command}({', '.join(map(str, args))})\n", MUTED)
+            self._refresh()
+            self._save_factory_state()
+            return result
+        except GameError as error:
+            self._console(f"FEHLER: {error}\n", RED, reveal=True)
+
+    def _open_build_window(self):
+        if self.mode != "factory" or self.factory_simulation is None:
+            return
+        if self.runtime.active and not self.paused:
+            self._toggle_pause()
+        if self.build_window and self.build_window.winfo_exists():
+            self.build_window.deiconify()
+            self.build_window.lift()
+            self._refresh_build_window()
+            return
+        window = tk.Toplevel(self.root)
+        window.title("CODEWERK // Baumodus")
+        window.geometry("430x500+980+160")
+        window.minsize(380, 400)
+        window.configure(bg=PANEL)
+        window.protocol("WM_DELETE_WINDOW", window.withdraw)
+        self.build_window = window
+        tk.Label(window, text="MASCHINENBAU", bg=PANEL, fg=ACCENT, font=("Segoe UI Semibold", 14)).pack(anchor="w", padx=16, pady=(16, 4))
+        tk.Label(window, text="Kaufen, dann ein freies Rasterfeld anklicken.", bg=PANEL, fg=MUTED, font=("Segoe UI", 9)).pack(anchor="w", padx=16, pady=(0, 10))
+        self.build_machine_frame = tk.Frame(window, bg=PANEL)
+        self.build_machine_frame.pack(fill="both", expand=True, padx=12)
+        tk.Frame(window, bg="#33404c", height=1).pack(fill="x", padx=14, pady=8)
+        self.build_selection_label = tk.Label(window, text="Keine Maschine ausgewaehlt", bg=PANEL, fg=MUTED, font=("Segoe UI", 9))
+        self.build_selection_label.pack(anchor="w", padx=16)
+        actions = tk.Frame(window, bg=PANEL)
+        actions.pack(fill="x", padx=12, pady=(8, 14))
+        self.move_machine_button = ttk.Button(actions, text="VERSCHIEBEN", style="Tool.TButton", command=self._begin_move_machine)
+        self.move_machine_button.pack(side="left", fill="x", expand=True)
+        self.sell_machine_button = ttk.Button(actions, text="VERKAUFEN", style="Tool.TButton", command=self._sell_selected_machine)
+        self.sell_machine_button.pack(side="left", fill="x", expand=True, padx=(6, 0))
+        self._refresh_build_window()
+
+    def _refresh_build_window(self):
+        if not self.build_window or not self.build_window.winfo_exists() or not hasattr(self, "build_machine_frame") or self.factory_simulation is None:
+            return
+        for child in self.build_machine_frame.winfo_children():
+            child.destroy()
+        unlocked = set(self.factory_simulation.unlocked_machines)
+        for kind, definition in FACTORY_MACHINE_DEFINITIONS.items():
+            row = tk.Frame(self.build_machine_frame, bg="#202b36")
+            row.pack(fill="x", pady=3)
+            tk.Label(row, text=f"{definition['name']}\n{definition['cost']} CR", bg="#202b36", fg=TEXT if kind in unlocked else MUTED, justify="left", font=("Segoe UI", 9)).pack(side="left", padx=10, pady=7)
+            button = ttk.Button(row, text="KAUFEN", style="Tool.TButton", command=lambda selected=kind: self._select_build_kind(selected))
+            button.pack(side="right", padx=7, pady=7)
+            if kind not in unlocked:
+                button.configure(state="disabled")
+        selected = self.selected_machine
+        if selected:
+            try:
+                machine = self.factory_simulation.machine_at(*selected)
+                self.build_selection_label.configure(text=f"Ausgewaehlt: {machine.name} bei {selected}")
+                self.move_machine_button.configure(state="normal")
+                self.sell_machine_button.configure(state="normal")
+            except GameError:
+                self.selected_machine = None
+        if not self.selected_machine:
+            self.build_selection_label.configure(text="Keine Maschine ausgewaehlt")
+            self.move_machine_button.configure(state="disabled")
+            self.sell_machine_button.configure(state="disabled")
+
+    def _select_build_kind(self, kind):
+        self.build_kind = kind
+        self.moving_machine = None
+        definition = FACTORY_MACHINE_DEFINITIONS[kind]
+        self._set_status(f"PLATZIEREN: {definition['name'].upper()}", ACCENT)
+        if self.build_window:
+            self.build_window.withdraw()
+
+    def _begin_move_machine(self):
+        if self.selected_machine:
+            self.moving_machine = self.selected_machine
+            self.build_kind = None
+            self._set_status("NEUE POSITION WAEHLEN", ACCENT)
+            self.build_window.withdraw()
+
+    def _sell_selected_machine(self):
+        if not self.selected_machine:
+            return
+        try:
+            refund = self.factory_simulation.sell_machine(*self.selected_machine)
+            self._console(f"Maschine verkauft: +{refund} Credits\n", GREEN)
+            self.selected_machine = None
+            self._refresh()
+            self._save_factory_state()
+        except GameError as error:
+            self._console(f"FEHLER: {error}\n", RED, reveal=True)
+
+    def _on_canvas_click(self, event):
+        if self.mode != "factory" or self.factory_simulation is None:
+            return
+        ox, oy, cell = self.grid_geometry
+        x, y = int((event.x - ox) // cell), int((event.y - oy) // cell)
+        if not (0 <= x < self.simulation.state.size and 0 <= y < self.simulation.state.size):
+            return
+        try:
+            if self.build_kind:
+                kind = self.build_kind
+                self.factory_simulation.place_machine(kind, x, y)
+                self._console(f"{FACTORY_MACHINE_DEFINITIONS[kind]['name']} bei ({x}, {y}) gebaut.\n", GREEN)
+                self.build_kind = None
+                self._set_status("HAUPTFABRIK", ACCENT)
+            elif self.moving_machine:
+                old = self.moving_machine
+                self.factory_simulation.move_machine(*old, x, y)
+                self._console(f"Maschine von {old} nach ({x}, {y}) verschoben.\n", GREEN)
+                self.moving_machine = None
+                self.selected_machine = (x, y)
+                self._set_status("HAUPTFABRIK", ACCENT)
+            else:
+                self.factory_simulation.machine_at(x, y)
+                self.selected_machine = (x, y)
+                self._open_build_window()
+            self._refresh()
+            self._save_factory_state()
+        except GameError as error:
+            if not self.build_kind and not self.moving_machine:
+                self.selected_machine = None
+                return
+            self._console(f"FEHLER: {error}\n", RED, reveal=True)
 
     def _draw_world(self):
         if not self.canvas.winfo_exists():
@@ -315,6 +608,7 @@ class FactoryGameApp:
         cell = min((width - 60) / state.size, (height - 60) / state.size)
         ox = (width - cell * state.size) / 2
         oy = (height - cell * state.size) / 2
+        self.grid_geometry = (ox, oy, cell)
         for y in range(state.size):
             for x in range(state.size):
                 x1, y1 = ox + x * cell, oy + y * cell
@@ -324,7 +618,7 @@ class FactoryGameApp:
         self._draw_station(*self.simulation.SHIPPING, "OUT", GREEN, cell, ox, oy)
         for machine in state.machines:
             color = ACCENT if machine.running else (GREEN if machine.output else "#8996a3")
-            label = {"press": "PRS", "mill": "FRS", "assembly": "ASM"}[machine.kind]
+            label = {"press": "PRS", "mill": "FRS", "assembly": "ASM", "wire_drawer": "DRT", "injection": "SGS"}.get(machine.kind, "MCH")
             self._draw_station(machine.x, machine.y, label, color, cell, ox, oy)
             if machine.running:
                 ratio = 1 - machine.remaining / machine.duration
@@ -371,7 +665,7 @@ class FactoryGameApp:
         for i in range(self.mission_index + 1):
             allowed.update(MISSIONS[i].unlocked_docs)
         allowed.add("files")
-        if "all" in allowed:
+        if self.mode == "factory" or "all" in allowed:
             allowed = set(HELP)
 
         def fill(*_):
@@ -404,8 +698,9 @@ class FactoryGameApp:
 
     def _close(self):
         self.progress["mission"] = self.mission_index
+        self.progress["mode"] = self.mode
         self.progress["console_geometry"] = self.console_window.geometry()
-        self._store_current_project()
+        self._save_current_context()
         self.store.save(self.progress)
         self.runtime.stop()
         self.console_window.destroy()

@@ -120,8 +120,17 @@ class SaveTests(unittest.TestCase):
             path = Path(directory) / "save.json"
             path.write_text('{"version": 1, "mission": 2, "unlocked": 2, "credits": 50, "codes": {"boot": "move(East)"}}', encoding="utf-8")
             state = SaveStore(path).load()
-            self.assertEqual(state["version"], 2)
+            self.assertEqual(state["version"], 3)
             self.assertEqual(state["projects"]["boot"]["main.py"], "move(East)")
+
+    def test_version_two_completed_tutorial_enters_factory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "save.json"
+            path.write_text('{"version": 2, "mission": 7, "unlocked": 7, "credits": 3220, "projects": {}, "shared_files": {"functions.py": "pass"}}', encoding="utf-8")
+            state = SaveStore(path).load()
+            self.assertTrue(state["tutorial_complete"])
+            self.assertEqual(state["mode"], "factory")
+            self.assertIn("functions.py", state["shared_files"])
 
 
 class ProjectTests(unittest.TestCase):

@@ -10,6 +10,11 @@ ITEM_NAMES = {
     "plate": "Metallplatte",
     "gear": "Zahnrad",
     "module": "Getriebemodul",
+    "copper": "Kupferrohling",
+    "polymer": "Polymergranulat",
+    "wire": "Kupferdraht",
+    "housing": "Kunststoffgehaeuse",
+    "actuator": "Aktuator",
 }
 
 MACHINE_DEFINITIONS = {
@@ -17,6 +22,16 @@ MACHINE_DEFINITIONS = {
     "mill": ("Fraese", ["plate"], "gear", 4),
     "assembly": ("Montage", ["plate", "gear"], "module", 5),
 }
+
+FACTORY_MACHINE_DEFINITIONS = {
+    "press": {"name": "Presse", "inputs": ["steel"], "output": "plate", "duration": 3, "cost": 500},
+    "mill": {"name": "Fraese", "inputs": ["plate"], "output": "gear", "duration": 4, "cost": 800},
+    "wire_drawer": {"name": "Drahtzieher", "inputs": ["copper"], "output": "wire", "duration": 4, "cost": 700},
+    "injection": {"name": "Spritzguss", "inputs": ["polymer"], "output": "housing", "duration": 4, "cost": 900},
+    "assembly": {"name": "Montage", "inputs": ["gear", "wire", "housing"], "output": "actuator", "duration": 6, "cost": 1200},
+}
+
+RAW_MATERIAL_PRICES = {"steel": 10, "copper": 12, "polymer": 8}
 
 MISSIONS = [
     Mission("boot", "01  Systemstart", "Die Wartungsdrohne reagiert wieder. Bewege sie zwei Felder nach Osten.", "Ein Befehl wird von oben nach unten ausgefuehrt.", "Erreiche Position (3, 1).", "move(East)\nmove(East)\n", ["move", "directions"], {"position": [3, 1]}, 100),
@@ -32,8 +47,8 @@ MISSIONS = [
 HELP = {
     "move": ("move(direction)", "Bewegt die Drohne ein Feld. Blockierte Bewegungen erzeugen einen Fehler.", "move(East)\nmove(South)"),
     "directions": ("Richtungen", "North, East, South und West sind vordefinierte Konstanten.", "for _ in range(3):\n    move(West)"),
-    "pick_up": ("pick_up()", "Nimmt am Materiallager einen Stahlrohling oder am Ausgang einer fertigen Maschine deren Produkt auf. Die Drohne muss auf dem jeweiligen Feld stehen und ihr Inventar muss leer sein.", "if can_pick_up():\n    pick_up()"),
-    "drop": ("drop()", "Uebergibt das getragene Teil kontextabhaengig: Auf einer Maschine wird es als Eingangsmaterial geladen, im Versand wird es fuer den Auftrag ausgeliefert.", "# Auf Maschine oder Versand stehen\ndrop()"),
+    "pick_up": ("pick_up(item=None)", "Nimmt im Tutorial den vorhandenen Rohstoff auf. In der Hauptfabrik waehlt pick_up(item) gezielt einen Rohstoff aus dem Eingangslager; an einem Maschinenausgang wird pick_up() ohne Argument verwendet.", "pick_up('steel')  # Eingangslager\npick_up()         # Maschinenausgang"),
+    "drop": ("drop()", "Uebergibt das getragene Teil kontextabhaengig: Auf einer Maschine wird es geladen, am Versandfeld wird es in das unbegrenzte Versandlager gelegt.", "# Auf Maschine oder Versand stehen\ndrop()"),
     "position": ("get_position()", "Gibt die aktuelle Position als (x, y) zurueck.", "x, y = get_position()\nwhile x < 5:\n    move(East)\n    x, y = get_position()"),
     "loops": ("Schleifen", "for wiederholt eine bekannte Anzahl, while solange eine Bedingung gilt.", "for _ in range(4):\n    move(East)"),
     "conditions": ("Bedingungen", "if fuehrt Code nur aus, wenn seine Bedingung wahr ist.", "if can_move(East):\n    move(East)"),
@@ -47,4 +62,23 @@ HELP = {
     "wait": ("wait(ticks=1)", "Laesst Simulationsticks verstreichen, damit Maschinen arbeiten.", "wait(3)"),
     "all": ("API-Uebersicht", "Im Abschlussauftrag stehen alle bisher erlernten Befehle zur Verfuegung.", "x, y = get_position()"),
     "files": ("Dateien und Imports", "Lege ueber + weitere Python-Dateien an. main.py ist der Einstieg. Lokale Module koennen normal oder mit from modul import * importiert werden; externe Pakete bleiben gesperrt.", "# positions.py\nPRESS = (3, 2)\n\n# main.py\nfrom positions import *\nget_to_pos(PRESS)"),
+    "contracts": ("Anfragen und Auftraege", "get_requests() liefert bis zu acht offene Angebote. Nach accept_request(id) erscheint der Auftrag in get_orders(). ticks_left zeigt die verbleibende Bonusfrist. Anfragen bleiben bis zur Annahme oder Ablehnung bestehen.", "for request_id, request in get_requests().items():\n    if request['base_payout'] > 100:\n        accept_request(request_id)"),
+    "get_requests": ("get_requests()", "Liefert einen Dictionary-Snapshot aller offenen Anfragen, nach Anfrage-ID indiziert. Enthalten sind product, quantity, base_payout, on_time_bonus und duration.", "requests = get_requests()"),
+    "get_orders": ("get_orders()", "Liefert alle aktiven Auftraege. ticks_left wird bei jeder Abfrage neu berechnet und erreicht bei Verspaetung null.", "orders = get_orders()"),
+    "accept_request": ("accept_request(request_id)", "Nimmt eine offene Anfrage an, startet ihre Bonusfrist und verbraucht einen Tick.", "accept_request('REQ-0001')"),
+    "reject_request": ("reject_request(request_id)", "Lehnt eine offene Anfrage ab. Nach einer kurzen Tickpause erscheint Ersatz.", "reject_request('REQ-0001')"),
+    "buy": ("buy(item)", "Kauft genau einen Rohstoff, zieht dessen Preis ab und legt ihn nach einem Tick ins Eingangslager. Kaufbar sind steel, copper und polymer.", "while get_input_stock('steel') < 5:\n    buy('steel')"),
+    "get_credits": ("get_credits()", "Liefert die aktuell verfuegbaren Credits. Die Abfrage verbraucht keinen Tick.", "if get_credits() >= 10:\n    buy('steel')"),
+    "stocks": ("Lagerbestaende", "get_input_stock() und get_shipping_stock() liefern Dictionaries. Mit einem Item-Argument liefern sie direkt dessen Anzahl. Im Eingangslager wird pick_up(item) verwendet.", "steel_count = get_input_stock('steel')\nall_products = get_shipping_stock()"),
+    "get_input_stock": ("get_input_stock(item=None)", "Ohne Argument: Dictionary-Snapshot des Eingangslagers. Mit Item: vorhandene Anzahl dieses Rohstoffs.", "steel = get_input_stock('steel')"),
+    "get_shipping_stock": ("get_shipping_stock(item=None)", "Ohne Argument: Dictionary-Snapshot des Versandlagers. Mit Item: vorhandene Anzahl dieses Produkts.", "plates = get_shipping_stock('plate')"),
+    "shipping": ("Auftraege versenden", "ship(order_id) funktioniert nur auf dem Versandfeld und nur als Komplettlieferung. Fehlen Produkte, bleiben Lager und Auftrag unveraendert.", "orders = get_orders()\nfor order_id in orders:\n    ship(order_id)"),
+    "ship": ("ship(order_id)", "Liefert den gewaehlten Auftrag auf dem Versandfeld komplett aus. Gibt die tatsaechliche Auszahlung zurueck und verbraucht einen Tick.", "payout = ship('ORD-0001')"),
+    "get_tick": ("get_tick()", "Liefert den aktuellen globalen Fabriktick, ohne selbst einen Tick zu verbrauchen.", "now = get_tick()"),
+    "building": ("Baumodus", "Der Baumodus pausiert laufenden Code. Leere Maschinen koennen kostenlos verschoben oder fuer 75 Prozent des Kaufpreises verkauft werden. Belegte oder laufende Maschinen sind gesperrt.", "# BAUEN in der oberen Werkzeugleiste"),
+    "factory_press": ("Presse kaufen", "Kosten: 500 Credits. Eingang: steel. Ausgabe: plate. Dauer: 3 Ticks.", "buy('steel')"),
+    "factory_mill": ("Fraese kaufen", "Kosten: 800 Credits. Eingang: plate. Ausgabe: gear. Dauer: 4 Ticks.", "# Freischaltung nach zwei Auftraegen"),
+    "factory_wire": ("Drahtzieher kaufen", "Kosten: 700 Credits. Eingang: copper. Ausgabe: wire. Dauer: 4 Ticks.", "buy('copper')"),
+    "factory_injection": ("Spritzguss kaufen", "Kosten: 900 Credits. Eingang: polymer. Ausgabe: housing. Dauer: 4 Ticks.", "buy('polymer')"),
+    "factory_assembly": ("Aktuator-Montage", "Kosten: 1200 Credits. Eingaenge: gear, wire und housing. Ausgabe: actuator. Dauer: 6 Ticks.", "# Alle drei Teile nacheinander mit drop() laden"),
 }

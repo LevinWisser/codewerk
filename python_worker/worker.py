@@ -8,7 +8,13 @@ import types
 
 
 BLOCKED_NAMES = {"__import__", "eval", "exec", "compile", "open", "input", "globals", "locals", "vars", "breakpoint", "help", "dir", "getattr", "setattr", "delattr"}
-API_NAMES = ["move", "pick_up", "drop", "get_position", "get_inventory", "get_item_type", "can_move", "can_pick_up", "load_machine", "start_machine", "machine_is_done", "collect_output", "wait"]
+API_NAMES = [
+    "move", "pick_up", "drop", "get_position", "get_inventory", "get_item_type",
+    "can_move", "can_pick_up", "load_machine", "start_machine", "machine_is_done",
+    "collect_output", "wait", "buy", "get_credits", "get_input_stock",
+    "get_shipping_stock", "get_requests", "get_orders", "accept_request",
+    "reject_request", "ship", "get_tick",
+]
 request_id = 0
 project_filenames = set()
 

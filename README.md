@@ -13,6 +13,7 @@ python main.py
 ## Enthalten
 
 - acht aufeinander aufbauende Tutorialauftraege
+- persistente Hauptfabrik nach Tutorial 8 mit parallelen Auftraegen und freiem Maschinenbau
 - Materiallager, Presse, Fraese, Montage und Versand
 - integrierter Python-Editor mit Start, Pause, Einzelschritt und Tempo
 - IntelliSense fuer Spielbefehle, Python-Schluesselwoerter, Variablen und eigene Funktionen (`Ctrl+Leertaste`)
@@ -32,6 +33,42 @@ python -m unittest discover -v
 ```
 
 Der Spielstand liegt unter `~/.codewerk/save.json`.
+
+## Hauptfabrik
+
+Nach Abschluss des Tutorials startet eine leere `10 x 10`-Halle. `main.py` ist neu, alle selbst erstellten Hilfsdateien bleiben erhalten. Maschinen werden im Baumodus gekauft und frei platziert. Nach zwölf abgeschlossenen Auftraegen einschließlich eines Aktuators erweitert sich die Halle auf `12 x 12`.
+
+Bis zu acht Kundenanfragen sind gleichzeitig sichtbar. Anfragen koennen ueber die UI oder Python angenommen und abgelehnt werden; aktive Auftraege sind nicht begrenzt:
+
+```python
+requests = get_requests()
+
+for request_id, request in requests.items():
+    if request["base_payout"] >= 100:
+        accept_request(request_id)
+```
+
+Rohstoffe werden ausschliesslich per Code gekauft. Jeder Kauf betrifft ein Teil und kostet einen Tick:
+
+```python
+while get_input_stock("steel") < 5:
+    buy("steel")
+
+pick_up("steel")  # auf dem Eingangslager
+```
+
+`drop()` legt Produkte am Versandfeld in ein unbegrenztes Versandlager. Ein Auftrag wird nur vollstaendig und nur auf dem Versandfeld ausgeliefert:
+
+```python
+orders = get_orders()
+
+for order_id, order in orders.items():
+    product = order["product"]
+    if get_shipping_stock(product) >= order["quantity"]:
+        ship(order_id)
+```
+
+Verspaetete Auftraege bleiben lieferbar und zahlen ihre Grundverguetung; lediglich der Puenktlichkeitsbonus entfaellt.
 
 ## Mehrere Dateien
 
