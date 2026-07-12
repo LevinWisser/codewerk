@@ -17,6 +17,7 @@ python main.py
 - integrierter Python-Editor mit Start, Pause, Einzelschritt und Tempo
 - IntelliSense fuer Spielbefehle, Python-Schluesselwoerter, Variablen und eigene Funktionen (`Ctrl+Leertaste`)
 - umbrochene, scrollbar dargestellte IntelliSense-Dokumentation und Syntaxfarben nach Symboltyp
+- frei verschiebbares und skalierbares Konsolenfenster mit automatischem Scrollen zur neuesten Ausgabe
 - mehrere Python-Dateien pro Auftrag mit Tabs und lokalen `import`-/`from ... import ...`-Anweisungen
 - separater Python-Worker mit eingeschraenkten Systemzugriffen
 - durchsuchbare, progressiv freigeschaltete Hilfe mit Codebeispielen

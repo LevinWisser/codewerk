@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from factory_game.content import HELP, ITEM_NAMES, MISSIONS
+from factory_game.console import ConsoleWindow
 from factory_game.editor import ProjectEditor
 from factory_game.persistence import SaveStore
 from factory_game.runtime import PythonRuntime
@@ -123,12 +124,11 @@ class FactoryGameApp:
         self.code_editor = ProjectEditor(right)
         self.code_editor.pack(fill="both", expand=True, padx=12)
 
-        console_head = tk.Frame(right, bg=PANEL)
-        console_head.pack(fill="x", padx=12, pady=(9, 4))
-        tk.Label(console_head, text="KONSOLE", bg=PANEL, fg=MUTED, font=("Segoe UI Semibold", 9)).pack(side="left")
-        ttk.Button(console_head, text="LEEREN", style="Tool.TButton", command=lambda: self.console.delete("1.0", "end")).pack(side="right")
-        self.console = tk.Text(right, height=7, bg="#0d1218", fg=MUTED, relief="flat", state="disabled", font=("Consolas", 9), padx=10, pady=8)
-        self.console.pack(fill="x", padx=12, pady=(0, 12))
+        console_bar = tk.Frame(right, bg=PANEL)
+        console_bar.pack(fill="x", padx=12, pady=(8, 10))
+        tk.Label(console_bar, text="Ausgabe in separatem Fenster", bg=PANEL, fg=MUTED, font=("Segoe UI", 9)).pack(side="left")
+        ttk.Button(console_bar, text="KONSOLE  ↗", style="Tool.TButton", command=self._show_console).pack(side="right")
+        self.console_window = ConsoleWindow(self.root, self.progress.get("console_geometry"))
 
     def _populate_missions(self):
         self.mission_list.delete(0, "end")
@@ -175,7 +175,7 @@ class FactoryGameApp:
         self.completed_this_run = False
         self.paused = False
         self.code_editor.clear_highlights()
-        self._console("\n--- Programm gestartet ---\n", TEXT)
+        self._console("\n--- Programm gestartet ---\n", TEXT, reveal=True)
         self.runtime.start(self.code_editor.get_files())
         self.run_button.configure(text="■  STOP", command=self._stop_code)
         self._set_status("LAEUFT", GREEN)
@@ -254,7 +254,7 @@ class FactoryGameApp:
         line = int(message.get("line", 1))
         filename = message.get("file", "main.py")
         self._highlight_line(filename, line, "error")
-        self._console(f"FEHLER in {filename}, Zeile {line}: {message.get('message')}\n", RED)
+        self._console(f"FEHLER in {filename}, Zeile {line}: {message.get('message')}\n", RED, reveal=True)
         self._stop_code()
         self._set_status("FEHLER", RED)
 
@@ -287,13 +287,11 @@ class FactoryGameApp:
     def _store_current_project(self):
         self.progress["projects"][MISSIONS[self.mission_index].id] = self.code_editor.get_files()
 
-    def _console(self, text, color=MUTED):
-        self.console.configure(state="normal")
-        tag = f"color_{color}"
-        self.console.tag_configure(tag, foreground=color)
-        self.console.insert("end", text, tag)
-        self.console.see("end")
-        self.console.configure(state="disabled")
+    def _show_console(self):
+        self.console_window.show()
+
+    def _console(self, text, color=MUTED, reveal=False):
+        self.console_window.write(text, color, reveal)
 
     def _set_status(self, text, color):
         self.status_label.configure(text=text, fg=color)
@@ -404,9 +402,11 @@ class FactoryGameApp:
 
     def _close(self):
         self.progress["mission"] = self.mission_index
+        self.progress["console_geometry"] = self.console_window.geometry()
         self._store_current_project()
         self.store.save(self.progress)
         self.runtime.stop()
+        self.console_window.destroy()
         self.root.destroy()
 
     def run(self):
