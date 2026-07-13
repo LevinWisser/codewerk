@@ -1,0 +1,405 @@
+{
+  "version": 1,
+  "assets": {
+    "drone_service": {
+      "path": "assets/runtime/drone/drone_service.png",
+      "size": [
+        192,
+        168
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "item_actuator": {
+      "path": "assets/runtime/items/item_actuator.png",
+      "size": [
+        80,
+        80
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "item_copper": {
+      "path": "assets/runtime/items/item_copper.png",
+      "size": [
+        80,
+        80
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "item_gear": {
+      "path": "assets/runtime/items/item_gear.png",
+      "size": [
+        80,
+        80
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "item_housing": {
+      "path": "assets/runtime/items/item_housing.png",
+      "size": [
+        80,
+        80
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "item_module": {
+      "path": "assets/runtime/items/item_module.png",
+      "size": [
+        80,
+        80
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "item_plate": {
+      "path": "assets/runtime/items/item_plate.png",
+      "size": [
+        80,
+        80
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "item_polymer": {
+      "path": "assets/runtime/items/item_polymer.png",
+      "size": [
+        80,
+        80
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "item_steel": {
+      "path": "assets/runtime/items/item_steel.png",
+      "size": [
+        80,
+        80
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "item_wire": {
+      "path": "assets/runtime/items/item_wire.png",
+      "size": [
+        80,
+        80
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "machine_assembly": {
+      "path": "assets/runtime/machines/machine_assembly.png",
+      "size": [
+        256,
+        320
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "machine_injection": {
+      "path": "assets/runtime/machines/machine_injection.png",
+      "size": [
+        256,
+        320
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "machine_mill": {
+      "path": "assets/runtime/machines/machine_mill.png",
+      "size": [
+        256,
+        320
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "machine_press": {
+      "path": "assets/runtime/machines/machine_press.png",
+      "size": [
+        256,
+        320
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "machine_wire_drawer": {
+      "path": "assets/runtime/machines/machine_wire_drawer.png",
+      "size": [
+        256,
+        320
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "station_shipping": {
+      "path": "assets/runtime/stations/station_shipping.png",
+      "size": [
+        256,
+        224
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "station_warehouse": {
+      "path": "assets/runtime/stations/station_warehouse.png",
+      "size": [
+        256,
+        224
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "floor_a": {
+      "path": "assets/runtime/tiles/floor_a.png",
+      "size": [
+        256,
+        128
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "floor_b": {
+      "path": "assets/runtime/tiles/floor_b.png",
+      "size": [
+        256,
+        128
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "icon_center": {
+      "path": "assets/runtime/ui/icon_center.png",
+      "size": [
+        48,
+        48
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "icon_follow": {
+      "path": "assets/runtime/ui/icon_follow.png",
+      "size": [
+        48,
+        48
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "icon_grid": {
+      "path": "assets/runtime/ui/icon_grid.png",
+      "size": [
+        48,
+        48
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "icon_labels": {
+      "path": "assets/runtime/ui/icon_labels.png",
+      "size": [
+        48,
+        48
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "icon_zoom_in": {
+      "path": "assets/runtime/ui/icon_zoom_in.png",
+      "size": [
+        48,
+        48
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    },
+    "icon_zoom_out": {
+      "path": "assets/runtime/ui/icon_zoom_out.png",
+      "size": [
+        48,
+        48
+      ],
+      "anchor": [
+        0.5,
+        1.0
+      ],
+      "footprint": [
+        1,
+        1
+      ],
+      "frames": 1
+    }
+  }
+}

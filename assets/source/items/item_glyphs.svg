@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="80" viewBox="0 0 720 80">
+  <style>.tile{fill:#35474f;stroke-width:4}.steel{fill:#7893a2;stroke:#7893a2}.copper{fill:#c77845;stroke:#c77845}.polymer{fill:#8b72c7;stroke:#8b72c7}.accent{fill:#16a6a3;stroke:#16a6a3}</style>
+  <g id="steel" transform="translate(40)"><rect x="5" y="5" width="70" height="70" rx="18" class="tile steel"/><path d="M23 52 32 28h26l9 24-12 10H34Z" class="steel"/></g>
+  <g id="plate" transform="translate(120)"><rect x="5" y="5" width="70" height="70" rx="18" class="tile steel"/><rect x="22" y="27" width="36" height="28" rx="5" class="steel"/></g>
+  <g id="gear" transform="translate(200)"><rect x="5" y="5" width="70" height="70" rx="18" class="tile steel"/><circle cx="40" cy="40" r="22" class="steel"/><circle cx="40" cy="40" r="8" fill="#35474f"/></g>
+  <g id="copper" transform="translate(280)"><rect x="5" y="5" width="70" height="70" rx="18" class="tile copper"/><path d="M23 52 32 28h26l9 24-12 10H34Z" class="copper"/></g>
+  <g id="wire" transform="translate(360)"><rect x="5" y="5" width="70" height="70" rx="18" class="tile copper"/><circle cx="40" cy="40" r="20" fill="none" class="copper" stroke-width="8"/><circle cx="40" cy="40" r="7" class="copper"/></g>
+  <g id="polymer" transform="translate(440)"><rect x="5" y="5" width="70" height="70" rx="18" class="tile polymer"/><circle cx="30" cy="31" r="8" class="polymer"/><circle cx="51" cy="34" r="8" class="polymer"/><circle cx="40" cy="52" r="8" class="polymer"/></g>
+  <g id="housing" transform="translate(520)"><rect x="5" y="5" width="70" height="70" rx="18" class="tile polymer"/><rect x="21" y="21" width="38" height="38" rx="10" fill="none" class="polymer" stroke-width="8"/></g>
+  <g id="actuator" transform="translate(600)"><rect x="5" y="5" width="70" height="70" rx="18" class="tile accent"/><rect x="21" y="26" width="38" height="28" rx="7" class="accent"/><path d="M28 18v44m24-44v44" stroke="#e8eff1" stroke-width="5"/></g>
+</svg>

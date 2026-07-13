@@ -117,7 +117,11 @@ class ProjectEditor(tk.Frame):
         ttk.Button(bar, text="+", style="Tool.TButton", width=3, command=self.add_file).pack(side="right")
         ttk.Button(bar, text="×", style="Tool.TButton", width=3, command=self.delete_current_file).pack(side="right", padx=(0, 4))
 
-        self.notebook = ttk.Notebook(self)
+        style = ttk.Style(self)
+        style.configure("Editor.TNotebook", background=PANEL, borderwidth=0)
+        style.configure("Editor.TNotebook.Tab", background="#202b36", foreground=MUTED, padding=(10, 6), borderwidth=0)
+        style.map("Editor.TNotebook.Tab", background=[("selected", EDITOR_BG)], foreground=[("selected", EDITOR_FG)])
+        self.notebook = ttk.Notebook(self, style="Editor.TNotebook")
         self.notebook.pack(fill="both", expand=True)
         self.notebook.bind("<<NotebookTabChanged>>", lambda _event: self._hide_completion())
 

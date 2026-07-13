@@ -120,7 +120,7 @@ class SaveTests(unittest.TestCase):
             path = Path(directory) / "save.json"
             path.write_text('{"version": 1, "mission": 2, "unlocked": 2, "credits": 50, "codes": {"boot": "move(East)"}}', encoding="utf-8")
             state = SaveStore(path).load()
-            self.assertEqual(state["version"], 3)
+            self.assertEqual(state["version"], SaveStore.VERSION)
             self.assertEqual(state["projects"]["boot"]["main.py"], "move(East)")
 
     def test_version_two_completed_tutorial_enters_factory(self):
@@ -131,6 +131,15 @@ class SaveTests(unittest.TestCase):
             self.assertTrue(state["tutorial_complete"])
             self.assertEqual(state["mode"], "factory")
             self.assertIn("functions.py", state["shared_files"])
+
+    def test_version_three_save_adds_ui_preferences_without_losing_projects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "save.json"
+            path.write_text('{"version": 3, "mission": 4, "unlocked": 5, "credits": 900, "projects": {"press": {"main.py": "wait()"}}}', encoding="utf-8")
+            state = SaveStore(path).load()
+            self.assertEqual(state["version"], SaveStore.VERSION)
+            self.assertEqual(state["projects"]["press"]["main.py"], "wait()")
+            self.assertEqual(state["ui_preferences"]["ui_scale"], 1.0)
 
 
 class ProjectTests(unittest.TestCase):

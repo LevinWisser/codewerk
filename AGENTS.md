@@ -5,8 +5,8 @@ This file is the authoritative handoff for coding agents working in this reposit
 ## Project State
 
 - Product: CODEWERK, a German-language 2D factory automation game controlled with standard Python syntax.
-- Current version: `0.2.0`.
-- Runtime: Python 3.11+, Tkinter, standard library only.
+- Current version: `0.3.0`.
+- Runtime: Python 3.11+, Tkinter, Pillow.
 - Entry point: `main.py`.
 - Tests: `python -m unittest discover -v`.
 - Save file: `~/.codewerk/save.json`, currently schema version 3.
@@ -34,6 +34,8 @@ This file is the authoritative handoff for coding agents working in this reposit
 - `factory_game/factory.py`: persistent main-factory simulation, economy, requests/orders, inventories, building, technology progression, and serialization.
 - `factory_game/content.py`: tutorial missions, item and machine definitions, API help, and data-driven gameplay content.
 - `factory_game/editor.py`: multi-file editor, local IntelliSense, completion documentation, and token-based syntax colors.
+- `factory_game/iso_renderer.py`: isometric projection, camera, hit testing, sprite caching, presentation animation, and world drawing.
+- `factory_game/design.py`: shared visual tokens and runtime asset-manifest access.
 - `factory_game/runtime.py`: lifecycle and JSON-lines transport for the isolated Python subprocess.
 - `python_worker/worker.py`: AST validation, local module loader, restricted built-ins, tracing, and Python-to-game API bridge.
 - `factory_game/projects.py`: mission-specific `main.py` plus tutorial-wide shared helper-file persistence.
@@ -41,6 +43,8 @@ This file is the authoritative handoff for coding agents working in this reposit
 - `factory_game/console.py`: detachable, resizable, auto-scrolling output window.
 
 Keep simulation and economy rules out of Tkinter callbacks. UI and player Python must call the same validated simulation operations. Content that can be represented as data belongs in `content.py`, not branch-heavy UI code.
+
+Visual sources and runtime exports live under `assets/`; `scripts/export_assets.py` reproducibly rebuilds the initial Aqua Lab asset set and manifest. Rendering may interpolate presentation state but must never mutate or delay simulation state.
 
 ## Main Factory Progression
 
@@ -118,4 +122,3 @@ Do not commit caches, local saves, shortcuts, generated files, or `handy_functio
 2. Improve contract inspection, production statistics, and code-facing prioritization tools without automating decisions for the player.
 3. Add Chapter 2 only after Chapter 1 economy and pacing are validated.
 4. Keep multi-drone support for Chapter 3 rather than introducing it early.
-

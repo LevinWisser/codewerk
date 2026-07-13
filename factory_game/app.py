@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import os
 import queue
 import time
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import ttk
 
 from factory_game.content import FACTORY_MACHINE_DEFINITIONS, HELP, ITEM_NAMES, MISSIONS
 from factory_game.console import ConsoleWindow
 from factory_game.editor import ProjectEditor
 from factory_game.factory import FactorySimulation
+from factory_game.iso_renderer import IsoRenderer
 from factory_game.persistence import SaveStore
 from factory_game.projects import load_mission_project, migrate_shared_files, store_mission_project
 from factory_game.runtime import PythonRuntime
@@ -28,15 +30,34 @@ RED = "#e76f51"
 BLUE = "#4ea8de"
 
 
+def _enable_windows_dpi_awareness() -> None:
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except (AttributeError, OSError):
+        pass
+
+
 class FactoryGameApp:
     def __init__(self):
+        _enable_windows_dpi_awareness()
         self.root = tk.Tk()
         self.root.title("CODEWERK // Programmierbare Fabrik")
-        self.root.geometry("1440x880")
-        self.root.minsize(1080, 700)
+        screen_width, screen_height = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+        window_width = min(1440, max(960, screen_width - 60))
+        window_height = min(880, max(680, screen_height - 90))
+        self.root.geometry(f"{window_width}x{window_height}")
+        self.root.minsize(min(1280, screen_width - 40), min(720, screen_height - 70))
         self.root.configure(bg=BG)
         self.store = SaveStore()
         self.progress = self.store.load()
+        self.ui_preferences = self.progress.setdefault("ui_preferences", {})
+        self.system_tk_scaling = float(self.root.tk.call("tk", "scaling"))
+        self.root.tk.call("tk", "scaling", self.system_tk_scaling * float(self.ui_preferences.get("ui_scale", 1.0)))
+        self.use_iso_renderer = os.environ.get("CODEWERK_LEGACY_RENDERER") != "1"
         self.mission_index = min(int(self.progress["mission"]), len(MISSIONS) - 1)
         migrate_shared_files(self.progress, MISSIONS[self.mission_index].id)
         self.progress["unlocked"] = max(int(self.progress["unlocked"]), self.mission_index)
@@ -48,6 +69,7 @@ class FactoryGameApp:
         self.selected_machine: tuple[int, int] | None = None
         self.build_window: tk.Toplevel | None = None
         self.grid_geometry = (0.0, 0.0, 1.0)
+        self.iso_renderer: IsoRenderer | None = None
         self.runtime = PythonRuntime()
         self.pending_calls: list[dict] = []
         self.paused = False
@@ -75,7 +97,14 @@ class FactoryGameApp:
         style.map("Accent.TButton", background=[("active", "#ffc857"), ("disabled", "#5b5549")])
         style.configure("Tool.TButton", background=PANEL_2, foreground=TEXT, padding=(10, 7), borderwidth=0)
         style.map("Tool.TButton", background=[("active", "#344454")])
+        style.configure("View.Tool.TButton", background=PANEL_2, foreground=TEXT, padding=(6, 5), font=("Segoe UI", 9), borderwidth=0)
+        style.map("View.Tool.TButton", background=[("active", "#344454")])
+        style.configure("Compact.Tool.TButton", background=PANEL_2, foreground=TEXT, padding=(4, 5), font=("Segoe UI", 8), borderwidth=0)
+        style.map("Compact.Tool.TButton", background=[("active", "#344454")])
         style.configure("TCombobox", fieldbackground=PANEL_2, background=PANEL_2, foreground=TEXT)
+        style.configure("Factory.TNotebook", background=PANEL, borderwidth=0)
+        style.configure("Factory.TNotebook.Tab", background=PANEL_2, foreground=MUTED, padding=(10, 7), borderwidth=0)
+        style.map("Factory.TNotebook.Tab", background=[("selected", "#2a4149")], foreground=[("selected", TEXT)])
 
     def _build_ui(self):
         top = tk.Frame(self.root, bg="#0c1117", height=58)
@@ -85,6 +114,7 @@ class FactoryGameApp:
         tk.Label(top, text="AUTOMATION LAB", bg="#0c1117", fg=MUTED, font=("Consolas", 9)).pack(side="left", pady=(6, 0))
         self.credit_label = tk.Label(top, bg="#0c1117", fg=TEXT, font=("Consolas", 11))
         self.credit_label.pack(side="right", padx=18)
+        ttk.Button(top, text="EINSTELLUNGEN", style="Tool.TButton", command=self._open_settings).pack(side="right", padx=5, pady=10)
         ttk.Button(top, text="HILFE", style="Tool.TButton", command=self._open_help).pack(side="right", padx=5, pady=10)
         self.build_button = ttk.Button(top, text="BAUEN", style="Tool.TButton", command=self._open_build_window)
 
@@ -113,29 +143,43 @@ class FactoryGameApp:
         world_head = tk.Frame(center, bg=BG)
         world_head.pack(fill="x", padx=14, pady=(12, 8))
         tk.Label(world_head, text="FABRIKHALLE A", bg=BG, fg=TEXT, font=("Segoe UI Semibold", 11)).pack(side="left")
+        self.coordinate_button = ttk.Button(world_head, text="KOORD", style="View.Tool.TButton", command=self._toggle_coordinates)
+        self.coordinate_button.pack(side="left", padx=(12, 3))
+        self.item_label_button = ttk.Button(world_head, text="ITEMS", style="View.Tool.TButton", command=self._toggle_item_labels)
+        self.item_label_button.pack(side="left", padx=3)
+        self.follow_button = ttk.Button(world_head, text="FOLGEN", style="View.Tool.TButton", command=self._toggle_follow)
+        self.follow_button.pack(side="left", padx=3)
+        ttk.Button(world_head, text="⌂", width=2, style="View.Tool.TButton", command=self._fit_camera).pack(side="left", padx=(7, 2))
+        ttk.Button(world_head, text="−", width=2, style="View.Tool.TButton", command=lambda: self._zoom_camera(1 / 1.15)).pack(side="left", padx=2)
+        ttk.Button(world_head, text="+", width=2, style="View.Tool.TButton", command=lambda: self._zoom_camera(1.15)).pack(side="left", padx=2)
         self.status_label = tk.Label(world_head, text="BEREIT", bg="#27343f", fg=MUTED, font=("Consolas", 9), padx=9, pady=3)
         self.status_label.pack(side="right")
-        self.canvas = tk.Canvas(center, bg="#0f151b", highlightthickness=0)
+        self.canvas = tk.Canvas(center, bg="#dce8e7", highlightthickness=0)
         self.canvas.pack(fill="both", expand=True, padx=14, pady=(0, 14))
-        self.canvas.bind("<Configure>", lambda _event: self._draw_world())
+        self.canvas.bind("<Configure>", self._on_canvas_configure)
         self.canvas.bind("<Button-1>", self._on_canvas_click)
+        if self.use_iso_renderer:
+            self.iso_renderer = IsoRenderer(self.canvas, self.ui_preferences)
 
         right = tk.Frame(body, bg=PANEL, width=470)
         body.add(right, minsize=380, width=470)
         editor_head = tk.Frame(right, bg=PANEL)
-        editor_head.pack(fill="x", padx=12, pady=(12, 8))
+        editor_head.pack(fill="x", padx=12, pady=(12, 5))
         tk.Label(editor_head, text="STEUERUNG.PY", bg=PANEL, fg=TEXT, font=("Segoe UI Semibold", 10)).pack(side="left")
         self.run_button = ttk.Button(editor_head, text="▶  START", style="Accent.TButton", command=self._run_code)
         self.run_button.pack(side="right")
-        self.pause_button = ttk.Button(editor_head, text="Ⅱ", style="Tool.TButton", command=self._toggle_pause, width=3)
-        self.pause_button.pack(side="right", padx=5)
-        self.step_button = ttk.Button(editor_head, text="›|", style="Tool.TButton", command=self._step, width=3)
-        self.step_button.pack(side="right")
-        self.reset_button = ttk.Button(editor_head, text="↻", style="Tool.TButton", command=self._reset_mission_state, width=3)
-        self.reset_button.pack(side="right", padx=(5, 0))
         self.speed = tk.StringVar(value="1×")
         speed_box = ttk.Combobox(editor_head, textvariable=self.speed, values=("0.5×", "1×", "2×", "4×"), state="readonly", width=5)
         speed_box.pack(side="right", padx=6)
+
+        editor_controls = tk.Frame(right, bg=PANEL)
+        editor_controls.pack(fill="x", padx=12, pady=(0, 7))
+        self.reset_button = ttk.Button(editor_controls, text="↻  RESET", style="View.Tool.TButton", command=self._reset_mission_state)
+        self.reset_button.pack(side="left")
+        self.pause_button = ttk.Button(editor_controls, text="Ⅱ  PAUSE", style="View.Tool.TButton", command=self._toggle_pause)
+        self.pause_button.pack(side="left", padx=4)
+        self.step_button = ttk.Button(editor_controls, text="›|  SCHRITT", style="View.Tool.TButton", command=self._step)
+        self.step_button.pack(side="left")
 
         self.code_editor = ProjectEditor(right)
         self.code_editor.pack(fill="both", expand=True, padx=12)
@@ -145,6 +189,9 @@ class FactoryGameApp:
         tk.Label(console_bar, text="Ausgabe in separatem Fenster", bg=PANEL, fg=MUTED, font=("Segoe UI", 9)).pack(side="left")
         ttk.Button(console_bar, text="KONSOLE  ↗", style="Tool.TButton", command=self._show_console).pack(side="right")
         self.console_window = ConsoleWindow(self.root, self.progress.get("console_geometry"))
+        self.toast_label = tk.Label(self.root, bg="#203139", fg=TEXT, font=("Segoe UI Semibold", 10), padx=16, pady=10)
+        self.toast_job = None
+        self._sync_view_controls()
 
     def _build_factory_panel(self, parent):
         self.factory_panel = tk.Frame(parent, bg=PANEL)
@@ -152,29 +199,41 @@ class FactoryGameApp:
         self.factory_progress_label = tk.Label(self.factory_panel, bg=PANEL, fg=MUTED, justify="left", font=("Segoe UI", 9))
         self.factory_progress_label.pack(anchor="w", padx=14, pady=(0, 12))
 
-        tk.Label(self.factory_panel, text="ANFRAGEN", bg=PANEL, fg=TEXT, font=("Segoe UI Semibold", 9)).pack(anchor="w", padx=14)
-        request_frame = tk.Frame(self.factory_panel, bg="#131a22")
-        request_frame.pack(fill="x", padx=10, pady=(5, 5))
+        self.contract_notebook = ttk.Notebook(self.factory_panel, style="Factory.TNotebook")
+        self.contract_notebook.pack(fill="both", expand=True, padx=10)
+        self.request_tab = tk.Frame(self.contract_notebook, bg=PANEL)
+        self.order_tab = tk.Frame(self.contract_notebook, bg=PANEL)
+        self.contract_notebook.add(self.request_tab, text="Anfragen")
+        self.contract_notebook.add(self.order_tab, text="Aufträge")
+        self.contract_notebook.bind("<<NotebookTabChanged>>", self._update_contract_detail)
+
+        request_frame = tk.Frame(self.request_tab, bg="#131a22")
+        request_frame.pack(fill="both", expand=True, pady=(6, 5))
         request_scroll = ttk.Scrollbar(request_frame, orient="vertical")
-        self.request_list = tk.Listbox(request_frame, bg="#131a22", fg=TEXT, selectbackground="#344454", borderwidth=0, highlightthickness=0, font=("Consolas", 8), height=9, exportselection=False, yscrollcommand=request_scroll.set)
+        self.request_list = tk.Listbox(request_frame, bg="#131a22", fg=TEXT, selectbackground="#344454", borderwidth=0, highlightthickness=0, font=("Consolas", 8), height=8, exportselection=False, yscrollcommand=request_scroll.set)
         request_scroll.configure(command=self.request_list.yview)
         request_scroll.pack(side="right", fill="y")
         self.request_list.pack(side="left", fill="both", expand=True)
-        request_actions = tk.Frame(self.factory_panel, bg=PANEL)
-        request_actions.pack(fill="x", padx=10)
-        ttk.Button(request_actions, text="ANNEHMEN", style="Tool.TButton", command=self._accept_selected_request).pack(side="left", fill="x", expand=True)
-        ttk.Button(request_actions, text="ABLEHNEN", style="Tool.TButton", command=self._reject_selected_request).pack(side="left", fill="x", expand=True, padx=(5, 0))
+        self.request_list.bind("<<ListboxSelect>>", self._update_contract_detail)
+        request_actions = tk.Frame(self.request_tab, bg=PANEL)
+        request_actions.pack(fill="x")
+        ttk.Button(request_actions, text="ANNEHMEN", style="Compact.Tool.TButton", command=self._accept_selected_request).pack(side="left", fill="x", expand=True)
+        ttk.Button(request_actions, text="ABLEHNEN", style="Compact.Tool.TButton", command=self._reject_selected_request).pack(side="left", fill="x", expand=True, padx=(5, 0))
 
-        tk.Label(self.factory_panel, text="AKTIVE AUFTRAEGE", bg=PANEL, fg=TEXT, font=("Segoe UI Semibold", 9)).pack(anchor="w", padx=14, pady=(16, 0))
-        order_frame = tk.Frame(self.factory_panel, bg="#131a22")
-        order_frame.pack(fill="x", padx=10, pady=(5, 8))
+        order_frame = tk.Frame(self.order_tab, bg="#131a22")
+        order_frame.pack(fill="both", expand=True, pady=(6, 0))
         order_scroll = ttk.Scrollbar(order_frame, orient="vertical")
-        self.order_list = tk.Listbox(order_frame, bg="#131a22", fg=TEXT, selectbackground="#344454", borderwidth=0, highlightthickness=0, font=("Consolas", 8), height=7, exportselection=False, yscrollcommand=order_scroll.set)
+        self.order_list = tk.Listbox(order_frame, bg="#131a22", fg=TEXT, selectbackground="#344454", borderwidth=0, highlightthickness=0, font=("Consolas", 8), height=8, exportselection=False, yscrollcommand=order_scroll.set)
         order_scroll.configure(command=self.order_list.yview)
         order_scroll.pack(side="right", fill="y")
         self.order_list.pack(side="left", fill="both", expand=True)
+        self.order_list.bind("<<ListboxSelect>>", self._update_contract_detail)
+
+        tk.Label(self.factory_panel, text="DETAILS", bg=PANEL, fg=TEXT, font=("Segoe UI Semibold", 8)).pack(anchor="w", padx=14, pady=(12, 3))
+        self.contract_detail_label = tk.Label(self.factory_panel, text="Eintrag auswählen", bg="#203139", fg=TEXT, justify="left", anchor="nw", wraplength=215, padx=10, pady=9, font=("Segoe UI", 8))
+        self.contract_detail_label.pack(fill="x", padx=10)
         self.factory_stock_label = tk.Label(self.factory_panel, bg=PANEL, fg=MUTED, justify="left", wraplength=215, font=("Consolas", 8))
-        self.factory_stock_label.pack(anchor="w", padx=14, pady=(4, 10))
+        self.factory_stock_label.pack(anchor="w", padx=14, pady=(10, 5))
         ttk.Button(self.factory_panel, text="TUTORIALS", style="Tool.TButton", command=lambda: self._load_mission(7)).pack(side="bottom", fill="x", padx=10, pady=10)
         self.factory_panel.place_forget()
 
@@ -250,7 +309,7 @@ class FactoryGameApp:
         if not self.build_button.winfo_ismapped():
             self.build_button.pack(side="right", padx=5, pady=10)
         self.reset_button.configure(state="disabled")
-        self._set_status("HAUPTFABRIK", ACCENT)
+        self._set_status("FABRIK", ACCENT)
         self._populate_missions()
         self._refresh()
 
@@ -341,6 +400,7 @@ class FactoryGameApp:
         filename = message.get("file", "main.py")
         self._highlight_line(filename, line, "error")
         self._console(f"FEHLER in {filename}, Zeile {line}: {message.get('message')}\n", RED, reveal=True)
+        self._show_toast(f"Fehler in {filename}, Zeile {line}", RED)
         self._stop_code()
         self._set_status("FEHLER", RED)
 
@@ -373,12 +433,12 @@ class FactoryGameApp:
         self._store_current_project()
         self.store.save(self.progress)
         self._console(f"AUFTRAG ERFUELLT  +{mission.reward} CREDITS\n", GREEN)
+        self._show_toast(f"{mission.title} erfüllt · +{mission.reward} Credits", GREEN)
         self._set_status("ERFUELLT", GREEN)
         self._populate_missions()
         def show_completion():
-            messagebox.showinfo("Auftrag erfuellt", f"{mission.title} abgeschlossen.\n\nBelohnung: {mission.reward} Credits")
-            if self.mission_index == len(MISSIONS) - 1:
-                self._load_factory()
+            next_action = self._load_factory if self.mission_index == len(MISSIONS) - 1 else None
+            self._show_sheet("Auftrag erfüllt", f"{mission.title} abgeschlossen.\n\nBelohnung: {mission.reward} Credits", next_action)
         self.root.after(350, show_completion)
 
     def _highlight_line(self, filename, line, tag):
@@ -395,7 +455,7 @@ class FactoryGameApp:
         self.progress["credits"] = self.factory_simulation.credits
         if self.factory_simulation.chapter_complete and not self.progress.get("chapter_1_complete"):
             self.progress["chapter_1_complete"] = True
-            self.root.after(100, lambda: messagebox.showinfo("Kapitel abgeschlossen", "Auftragsfertigung abgeschlossen.\n\nDie Halle wurde auf 12 × 12 erweitert. Kapitel 2 wird in einer spaeteren Version fortgesetzt."))
+            self.root.after(100, lambda: self._show_sheet("Kapitel abgeschlossen", "Auftragsfertigung abgeschlossen.\n\nDie Halle wurde auf 12 × 12 erweitert. Kapitel 2 wird in einer späteren Version fortgesetzt."))
         self.store.save(self.progress)
 
     def _save_current_context(self):
@@ -411,6 +471,127 @@ class FactoryGameApp:
 
     def _set_status(self, text, color):
         self.status_label.configure(text=text, fg=color)
+
+    def _on_canvas_configure(self, _event=None):
+        if self.iso_renderer and not self.iso_renderer.camera.user_adjusted and self.canvas.winfo_width() > 300:
+            self.iso_renderer.fit()
+        self._draw_world()
+
+    def _fit_camera(self):
+        if self.iso_renderer:
+            self.iso_renderer.fit()
+            self._draw_world()
+
+    def _zoom_camera(self, factor):
+        if self.iso_renderer:
+            self.iso_renderer.zoom_by(factor)
+            self._draw_world()
+
+    def _toggle_coordinates(self):
+        if self.iso_renderer:
+            self.iso_renderer.toggle_coordinates()
+            self._sync_view_controls()
+
+    def _toggle_item_labels(self):
+        if self.iso_renderer:
+            self.iso_renderer.toggle_item_labels()
+            self._sync_view_controls()
+
+    def _toggle_follow(self):
+        if self.iso_renderer:
+            self.iso_renderer.toggle_follow()
+            self._sync_view_controls()
+
+    def _sync_view_controls(self):
+        renderer = self.iso_renderer
+        if not renderer:
+            for button in (getattr(self, "coordinate_button", None), getattr(self, "item_label_button", None), getattr(self, "follow_button", None)):
+                if button:
+                    button.configure(state="disabled")
+            return
+        self.coordinate_button.configure(text="✓ KOORD" if renderer.show_coordinates else "KOORD")
+        self.item_label_button.configure(text="✓ ITEMS" if renderer.show_item_labels else "ITEMS")
+        self.follow_button.configure(text="✓ FOLGEN" if renderer.follow_drone else "FOLGEN")
+
+    def _open_settings(self):
+        window = tk.Toplevel(self.root)
+        window.title("CODEWERK // Einstellungen")
+        window.geometry("430x390+860+170")
+        window.resizable(False, False)
+        window.configure(bg=PANEL)
+        tk.Label(window, text="Darstellung", bg=PANEL, fg=ACCENT, font=("Segoe UI Semibold", 15)).pack(anchor="w", padx=20, pady=(20, 4))
+        tk.Label(window, text="Aqua-Lab-Ansicht und barrierearme Darstellungsoptionen", bg=PANEL, fg=MUTED, font=("Segoe UI", 9)).pack(anchor="w", padx=20, pady=(0, 16))
+
+        scale_var = tk.StringVar(value=f"{round(float(self.ui_preferences.get('ui_scale', 1.0)) * 100)} %")
+        reduced_var = tk.BooleanVar(value=bool(self.ui_preferences.get("reduced_motion", False)))
+        coordinate_var = tk.BooleanVar(value=bool(self.iso_renderer and self.iso_renderer.show_coordinates))
+        labels_var = tk.BooleanVar(value=bool(self.iso_renderer and self.iso_renderer.show_item_labels))
+        follow_var = tk.BooleanVar(value=bool(self.iso_renderer and self.iso_renderer.follow_drone))
+
+        row = tk.Frame(window, bg=PANEL)
+        row.pack(fill="x", padx=20, pady=6)
+        tk.Label(row, text="UI-Skalierung", bg=PANEL, fg=TEXT, font=("Segoe UI", 10)).pack(side="left")
+        ttk.Combobox(row, textvariable=scale_var, values=("90 %", "100 %", "110 %", "125 %", "150 %"), state="readonly", width=8).pack(side="right")
+        for text, variable in (
+            ("Reduzierte Bewegung", reduced_var),
+            ("Alle Rasterkoordinaten anzeigen", coordinate_var),
+            ("Itemnamen anzeigen", labels_var),
+            ("Drohne mit Kamera verfolgen", follow_var),
+        ):
+            tk.Checkbutton(window, text=text, variable=variable, bg=PANEL, fg=TEXT, activebackground=PANEL, activeforeground=TEXT, selectcolor=PANEL_2, font=("Segoe UI", 10), anchor="w").pack(fill="x", padx=20, pady=5)
+
+        def apply():
+            scale = int(scale_var.get().split()[0]) / 100
+            self.ui_preferences["ui_scale"] = scale
+            self.ui_preferences["reduced_motion"] = reduced_var.get()
+            self.root.tk.call("tk", "scaling", self.system_tk_scaling * scale)
+            if self.iso_renderer:
+                self.iso_renderer.reduced_motion = reduced_var.get()
+                self.iso_renderer.show_coordinates = coordinate_var.get()
+                self.iso_renderer.show_item_labels = labels_var.get()
+                self.iso_renderer.follow_drone = follow_var.get()
+                self.iso_renderer.invalidate_static()
+            self._sync_view_controls()
+            self._save_ui_preferences()
+            self.store.save(self.progress)
+            self._show_toast("Darstellungseinstellungen gespeichert", GREEN)
+            window.destroy()
+
+        ttk.Button(window, text="SPEICHERN", style="Accent.TButton", command=apply).pack(side="bottom", fill="x", padx=20, pady=20)
+
+    def _save_ui_preferences(self):
+        preferences = dict(self.progress.get("ui_preferences", {}))
+        preferences["ui_scale"] = float(self.ui_preferences.get("ui_scale", 1.0))
+        if self.iso_renderer:
+            preferences.update(self.iso_renderer.preferences())
+        self.ui_preferences = preferences
+        self.progress["ui_preferences"] = preferences
+
+    def _show_toast(self, text, color=ACCENT, duration=3200):
+        if self.toast_job:
+            self.root.after_cancel(self.toast_job)
+        self.toast_label.configure(text=text, fg=color)
+        self.toast_label.place(relx=.5, y=66, anchor="n")
+        self.toast_label.lift()
+        self.toast_job = self.root.after(duration, self.toast_label.place_forget)
+
+    def _show_sheet(self, title, body, on_close=None):
+        existing = getattr(self, "completion_sheet", None)
+        if existing and existing.winfo_exists():
+            existing.destroy()
+        sheet = tk.Frame(self.root, bg=PANEL_2, highlightbackground=ACCENT, highlightthickness=2, padx=28, pady=24)
+        self.completion_sheet = sheet
+        sheet.place(relx=.5, rely=.5, anchor="center", width=470)
+        sheet.lift()
+        tk.Label(sheet, text=title, bg=PANEL_2, fg=ACCENT, font=("Segoe UI Semibold", 18)).pack(anchor="w")
+        tk.Label(sheet, text=body, bg=PANEL_2, fg=TEXT, justify="left", wraplength=410, font=("Segoe UI", 11)).pack(anchor="w", pady=(12, 20))
+
+        def close():
+            sheet.destroy()
+            if on_close:
+                on_close()
+
+        ttk.Button(sheet, text="WEITER", style="Accent.TButton", command=close).pack(fill="x")
 
     def _refresh(self):
         state = self.simulation.state
@@ -431,6 +612,8 @@ class FactoryGameApp:
             return
         factory = self.factory_simulation
         self.factory_progress_label.configure(text=f"Kapitel 1  ·  Technik {factory.technology_level}/4\nAuftraege {factory.completed_count}/12")
+        selected_request = self._selected_request_id() if hasattr(self, "request_ids") else None
+        selected_order = self._selected_order_id() if hasattr(self, "order_ids") else None
         self.request_ids = list(factory.requests)
         self.request_list.delete(0, "end")
         for request_id in self.request_ids:
@@ -438,6 +621,8 @@ class FactoryGameApp:
             product = ITEM_NAMES.get(request["product"], request["product"])
             total = request["base_payout"] + request["on_time_bonus"]
             self.request_list.insert("end", f"{request_id}  {request['quantity']}x {product[:12]}  {total} CR")
+        if selected_request in self.request_ids:
+            self.request_list.selection_set(self.request_ids.index(selected_request))
         self.order_ids = list(factory.orders)
         self.order_list.delete(0, "end")
         orders = factory.get_orders()
@@ -448,14 +633,46 @@ class FactoryGameApp:
             self.order_list.insert("end", f"{order_id}  {order['quantity']}x {product[:11]}  {deadline}")
             if not order["ticks_left"]:
                 self.order_list.itemconfig("end", fg=RED)
+        if selected_order in self.order_ids:
+            self.order_list.selection_set(self.order_ids.index(selected_order))
+        self.contract_notebook.tab(self.request_tab, text=f"Anfragen  {len(self.request_ids)}")
+        self.contract_notebook.tab(self.order_tab, text=f"Aufträge  {len(self.order_ids)}")
         input_text = ", ".join(f"{ITEM_NAMES.get(item, item)}:{amount}" for item, amount in factory.input_inventory.items() if amount) or "leer"
         shipping_text = ", ".join(f"{ITEM_NAMES.get(item, item)}:{amount}" for item, amount in factory.shipping_inventory.items() if amount) or "leer"
         self.factory_stock_label.configure(text=f"EINGANG  {input_text}\nVERSAND  {shipping_text}")
+        self._update_contract_detail()
         self._refresh_build_window()
 
     def _selected_request_id(self):
         selection = self.request_list.curselection()
         return self.request_ids[selection[0]] if selection and selection[0] < len(self.request_ids) else None
+
+    def _selected_order_id(self):
+        selection = self.order_list.curselection()
+        return self.order_ids[selection[0]] if selection and selection[0] < len(self.order_ids) else None
+
+    def _update_contract_detail(self, _event=None):
+        if self.factory_simulation is None or not hasattr(self, "contract_detail_label"):
+            return
+        if self.contract_notebook.index("current") == 0:
+            request_id = self._selected_request_id()
+            request = self.factory_simulation.requests.get(request_id) if request_id else None
+            if request:
+                product = ITEM_NAMES.get(request["product"], request["product"])
+                total = request["base_payout"] + request["on_time_bonus"]
+                text = f"{request_id} · {product}\n{request['quantity']} Stück · {total} CR gesamt\nBasis {request['base_payout']} · Bonus {request['on_time_bonus']}\nBonusfrist {request['duration']} Ticks"
+            else:
+                text = "Anfrage auswählen"
+        else:
+            order_id = self._selected_order_id()
+            order = self.factory_simulation.get_orders().get(order_id) if order_id else None
+            if order:
+                product = ITEM_NAMES.get(order["product"], order["product"])
+                deadline = f"noch {order['ticks_left']} Ticks" if order["ticks_left"] else "verspätet · Basis bleibt erhalten"
+                text = f"{order_id} · {product}\n{order['quantity']} Stück · {deadline}\nBasis {order['base_payout']} · Bonus {order['on_time_bonus']}"
+            else:
+                text = "Aktiven Auftrag auswählen"
+        self.contract_detail_label.configure(text=text)
 
     def _accept_selected_request(self):
         request_id = self._selected_request_id()
@@ -478,6 +695,7 @@ class FactoryGameApp:
             return result
         except GameError as error:
             self._console(f"FEHLER: {error}\n", RED, reveal=True)
+            self._show_toast(str(error), RED)
 
     def _open_build_window(self):
         if self.mode != "factory" or self.factory_simulation is None:
@@ -565,12 +783,19 @@ class FactoryGameApp:
             self._save_factory_state()
         except GameError as error:
             self._console(f"FEHLER: {error}\n", RED, reveal=True)
+            self._show_toast(str(error), RED)
 
     def _on_canvas_click(self, event):
         if self.mode != "factory" or self.factory_simulation is None:
             return
-        ox, oy, cell = self.grid_geometry
-        x, y = int((event.x - ox) // cell), int((event.y - oy) // cell)
+        if self.iso_renderer:
+            tile = self.iso_renderer.tile_at(event.x, event.y)
+            if tile is None:
+                return
+            x, y = tile
+        else:
+            ox, oy, cell = self.grid_geometry
+            x, y = int((event.x - ox) // cell), int((event.y - oy) // cell)
         if not (0 <= x < self.simulation.state.size and 0 <= y < self.simulation.state.size):
             return
         try:
@@ -579,14 +804,14 @@ class FactoryGameApp:
                 self.factory_simulation.place_machine(kind, x, y)
                 self._console(f"{FACTORY_MACHINE_DEFINITIONS[kind]['name']} bei ({x}, {y}) gebaut.\n", GREEN)
                 self.build_kind = None
-                self._set_status("HAUPTFABRIK", ACCENT)
+                self._set_status("FABRIK", ACCENT)
             elif self.moving_machine:
                 old = self.moving_machine
                 self.factory_simulation.move_machine(*old, x, y)
                 self._console(f"Maschine von {old} nach ({x}, {y}) verschoben.\n", GREEN)
                 self.moving_machine = None
                 self.selected_machine = (x, y)
-                self._set_status("HAUPTFABRIK", ACCENT)
+                self._set_status("FABRIK", ACCENT)
             else:
                 self.factory_simulation.machine_at(x, y)
                 self.selected_machine = (x, y)
@@ -598,8 +823,15 @@ class FactoryGameApp:
                 self.selected_machine = None
                 return
             self._console(f"FEHLER: {error}\n", RED, reveal=True)
+            self._show_toast(str(error), RED)
 
     def _draw_world(self):
+        if self.iso_renderer:
+            self.iso_renderer.set_state(self.simulation.state, self.simulation.WAREHOUSE, self.simulation.SHIPPING, self.speed.get())
+            return
+        self._draw_world_legacy()
+
+    def _draw_world_legacy(self):
         if not self.canvas.winfo_exists():
             return
         self.canvas.delete("all")
@@ -700,6 +932,7 @@ class FactoryGameApp:
         self.progress["mission"] = self.mission_index
         self.progress["mode"] = self.mode
         self.progress["console_geometry"] = self.console_window.geometry()
+        self._save_ui_preferences()
         self._save_current_context()
         self.store.save(self.progress)
         self.runtime.stop()

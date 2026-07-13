@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 class SaveStore:
-    VERSION = 3
+    VERSION = 4
 
     def __init__(self, path: Path | None = None):
         self.path = path or Path.home() / ".codewerk" / "save.json"
@@ -16,6 +16,13 @@ class SaveStore:
             "projects": {}, "shared_files": {}, "console_geometry": None,
             "tutorial_complete": False, "completed_tutorial_missions": [],
             "mode": "tutorial", "factory_state": None,
+            "ui_preferences": {
+                "ui_scale": 1.0, "reduced_motion": False,
+                "show_coordinates": False, "show_item_labels": False,
+                "follow_drone": False, "camera_zoom": 1.0,
+                "camera_pan_x": 0.0, "camera_pan_y": 0.0,
+                "camera_adjusted": False,
+            },
         }
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
@@ -25,15 +32,19 @@ class SaveStore:
             if data.get("version") == 2:
                 tutorial_complete = int(data.get("unlocked", 0)) >= 7 and int(data.get("credits", 0)) >= 3220
                 completed_count = 8 if tutorial_complete else min(7, int(data.get("unlocked", 0)))
-                return defaults | data | {
-                    "version": self.VERSION,
+                data = defaults | data | {
+                    "version": 3,
                     "tutorial_complete": tutorial_complete,
                     "completed_tutorial_missions": list(range(completed_count)),
                     "mode": "factory" if tutorial_complete else "tutorial",
                 }
+            if data.get("version") == 3:
+                data = defaults | data | {"version": self.VERSION}
             if data.get("version") != self.VERSION:
                 return defaults
-            return defaults | data
+            result = defaults | data
+            result["ui_preferences"] = defaults["ui_preferences"] | data.get("ui_preferences", {})
+            return result
         except (OSError, ValueError):
             return defaults
 

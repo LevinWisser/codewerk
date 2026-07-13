@@ -1,0 +1,50 @@
+{
+  "meta": {"name": "CODEWERK Aqua Lab", "version": 1},
+  "color": {
+    "world_background": "#dce8e7",
+    "floor_a": "#f1f6f4",
+    "floor_b": "#e7f0ee",
+    "grid": "#c7d8d5",
+    "machine_shell": "#f7f9f7",
+    "machine_secondary": "#d8e2e0",
+    "mechanics": "#35474f",
+    "metal": "#82949a",
+    "accent": "#16a6a3",
+    "hologram": "#43c6d5",
+    "success": "#38a66f",
+    "warning": "#e1a23a",
+    "error": "#d85f5f",
+    "code_background": "#10191f",
+    "panel": "#17242b",
+    "panel_elevated": "#203139",
+    "text_light": "#e8eff1",
+    "text_muted": "#93a6ad",
+    "steel": "#7893a2",
+    "copper": "#c77845",
+    "polymer": "#8b72c7"
+  },
+  "geometry": {
+    "tile_width": 128,
+    "tile_height": 64,
+    "asset_scale": 2,
+    "space": 8,
+    "compact_space": 4,
+    "control_height": 36,
+    "compact_row_height": 32,
+    "panel_radius": 10,
+    "button_radius": 6,
+    "icon_size": 24,
+    "icon_stroke": 2
+  },
+  "motion": {
+    "drone_move_ms": 220,
+    "service_ms": 160,
+    "machine_start_ms": 160,
+    "output_reveal_ms": 240,
+    "ui_hover_ms": 110,
+    "panel_ms": 180,
+    "active_fps": 60,
+    "fallback_fps": 30
+  },
+  "camera": {"min_zoom": 0.35, "max_zoom": 2.0, "default_zoom": 1.0}
+}
