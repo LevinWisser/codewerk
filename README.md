@@ -20,7 +20,7 @@ python main.py
 
 - acht aufeinander aufbauende Tutorialauftraege
 - persistente Hauptfabrik nach Tutorial 8 mit parallelen Auftraegen und freiem Maschinenbau
-- feste isometrische 2:1-Fabrikansicht mit Zoom, Pan, Koordinaten-Hover und optionalem Drohnen-Follow
+- feste perspektivische 2.5D-Fabrikansicht mit Zoom, Pan, Koordinaten-Hover und optionalem Drohnen-Follow
 - Aqua-Lab-Designsystem mit transparenten Maschinensprites, Item-Hologrammen und adaptiver Bewegungsanimation
 - barrierearme Ansichtsoptionen fuer reduzierte Bewegung, Koordinaten und Itemlabels
 - Materiallager, Presse, Fraese, Montage und Versand
@@ -43,7 +43,7 @@ python -m unittest discover -v
 
 Der Spielstand liegt unter `~/.codewerk/save.json`.
 
-Die isometrische Ansicht ist die Standarddarstellung. Fuer Vergleich und Fehlersuche kann der bisherige Renderer intern mit `CODEWERK_LEGACY_RENDERER=1` aktiviert werden. Die reproduzierbaren Runtime-Assets werden mit `python scripts/export_assets.py` neu erzeugt; die Gestaltungsregeln stehen in [docs/VISUAL_DESIGN_SYSTEM.md](docs/VISUAL_DESIGN_SYSTEM.md).
+Die feste 3D-Laboransicht ist die Standarddarstellung und kann nicht rotiert werden. Fuer Vergleich und Fehlersuche kann der einfache Rasterrenderer intern mit `CODEWERK_LEGACY_RENDERER=1` aktiviert werden. UI- und Itemassets werden mit `python scripts/export_assets.py` erzeugt; die Blender-Szene und Fixed-View-Assets mit Blender 4.5 LTS und `scripts/blender_aqua_lab_poc.py`. Die Gestaltungsregeln stehen in [docs/VISUAL_DESIGN_SYSTEM.md](docs/VISUAL_DESIGN_SYSTEM.md).
 
 ## Hauptfabrik
 

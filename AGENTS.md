@@ -9,7 +9,7 @@ This file is the authoritative handoff for coding agents working in this reposit
 - Runtime: Python 3.11+, Tkinter, Pillow.
 - Entry point: `main.py`.
 - Tests: `python -m unittest discover -v`.
-- Save file: `~/.codewerk/save.json`, currently schema version 3.
+- Save file: `~/.codewerk/save.json`, currently schema version 4.
 - GitHub: `https://github.com/LevinWisser/codewerk`, default branch `main`.
 - `handy_functions/` is user-owned, intentionally untracked content. Never delete, modify, move, ignore, or commit it unless the user explicitly requests that exact action.
 
@@ -34,7 +34,8 @@ This file is the authoritative handoff for coding agents working in this reposit
 - `factory_game/factory.py`: persistent main-factory simulation, economy, requests/orders, inventories, building, technology progression, and serialization.
 - `factory_game/content.py`: tutorial missions, item and machine definitions, API help, and data-driven gameplay content.
 - `factory_game/editor.py`: multi-file editor, local IntelliSense, completion documentation, and token-based syntax colors.
-- `factory_game/iso_renderer.py`: isometric projection, camera, hit testing, sprite caching, presentation animation, and world drawing.
+- `factory_game/fixed_renderer.py`: fixed-perspective camera, authored polygon hit testing, sprite caching, presentation animation, and world drawing.
+- `factory_game/iso_renderer.py`: retained projection utilities and the previous isometric renderer for compatibility tests and comparison.
 - `factory_game/design.py`: shared visual tokens and runtime asset-manifest access.
 - `factory_game/runtime.py`: lifecycle and JSON-lines transport for the isolated Python subprocess.
 - `python_worker/worker.py`: AST validation, local module loader, restricted built-ins, tracing, and Python-to-game API bridge.
@@ -44,7 +45,7 @@ This file is the authoritative handoff for coding agents working in this reposit
 
 Keep simulation and economy rules out of Tkinter callbacks. UI and player Python must call the same validated simulation operations. Content that can be represented as data belongs in `content.py`, not branch-heavy UI code.
 
-Visual sources and runtime exports live under `assets/`; `scripts/export_assets.py` reproducibly rebuilds the initial Aqua Lab asset set and manifest. Rendering may interpolate presentation state but must never mutate or delay simulation state.
+Visual sources and runtime exports live under `assets/`; `scripts/export_assets.py` rebuilds UI and item assets, while Blender 4.5 LTS with `scripts/blender_aqua_lab_poc.py` rebuilds the fixed-view halls, machines, stations, drone, and perspective-layout metadata. Rendering may interpolate presentation state but must never mutate or delay simulation state.
 
 ## Main Factory Progression
 

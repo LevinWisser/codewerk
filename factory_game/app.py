@@ -10,7 +10,7 @@ from factory_game.content import FACTORY_MACHINE_DEFINITIONS, HELP, ITEM_NAMES, 
 from factory_game.console import ConsoleWindow
 from factory_game.editor import ProjectEditor
 from factory_game.factory import FactorySimulation
-from factory_game.iso_renderer import IsoRenderer
+from factory_game.fixed_renderer import FixedViewRenderer
 from factory_game.persistence import SaveStore
 from factory_game.projects import load_mission_project, migrate_shared_files, store_mission_project
 from factory_game.runtime import PythonRuntime
@@ -57,7 +57,7 @@ class FactoryGameApp:
         self.ui_preferences = self.progress.setdefault("ui_preferences", {})
         self.system_tk_scaling = float(self.root.tk.call("tk", "scaling"))
         self.root.tk.call("tk", "scaling", self.system_tk_scaling * float(self.ui_preferences.get("ui_scale", 1.0)))
-        self.use_iso_renderer = os.environ.get("CODEWERK_LEGACY_RENDERER") != "1"
+        self.use_asset_renderer = os.environ.get("CODEWERK_LEGACY_RENDERER") != "1"
         self.mission_index = min(int(self.progress["mission"]), len(MISSIONS) - 1)
         migrate_shared_files(self.progress, MISSIONS[self.mission_index].id)
         self.progress["unlocked"] = max(int(self.progress["unlocked"]), self.mission_index)
@@ -69,7 +69,7 @@ class FactoryGameApp:
         self.selected_machine: tuple[int, int] | None = None
         self.build_window: tk.Toplevel | None = None
         self.grid_geometry = (0.0, 0.0, 1.0)
-        self.iso_renderer: IsoRenderer | None = None
+        self.world_renderer: FixedViewRenderer | None = None
         self.runtime = PythonRuntime()
         self.pending_calls: list[dict] = []
         self.paused = False
@@ -158,8 +158,8 @@ class FactoryGameApp:
         self.canvas.pack(fill="both", expand=True, padx=14, pady=(0, 14))
         self.canvas.bind("<Configure>", self._on_canvas_configure)
         self.canvas.bind("<Button-1>", self._on_canvas_click)
-        if self.use_iso_renderer:
-            self.iso_renderer = IsoRenderer(self.canvas, self.ui_preferences)
+        if self.use_asset_renderer:
+            self.world_renderer = FixedViewRenderer(self.canvas, self.ui_preferences)
 
         right = tk.Frame(body, bg=PANEL, width=470)
         body.add(right, minsize=380, width=470)
@@ -473,37 +473,37 @@ class FactoryGameApp:
         self.status_label.configure(text=text, fg=color)
 
     def _on_canvas_configure(self, _event=None):
-        if self.iso_renderer and not self.iso_renderer.camera.user_adjusted and self.canvas.winfo_width() > 300:
-            self.iso_renderer.fit()
+        if self.world_renderer and not self.world_renderer.camera.user_adjusted and self.canvas.winfo_width() > 300:
+            self.world_renderer.fit()
         self._draw_world()
 
     def _fit_camera(self):
-        if self.iso_renderer:
-            self.iso_renderer.fit()
+        if self.world_renderer:
+            self.world_renderer.fit()
             self._draw_world()
 
     def _zoom_camera(self, factor):
-        if self.iso_renderer:
-            self.iso_renderer.zoom_by(factor)
+        if self.world_renderer:
+            self.world_renderer.zoom_by(factor)
             self._draw_world()
 
     def _toggle_coordinates(self):
-        if self.iso_renderer:
-            self.iso_renderer.toggle_coordinates()
+        if self.world_renderer:
+            self.world_renderer.toggle_coordinates()
             self._sync_view_controls()
 
     def _toggle_item_labels(self):
-        if self.iso_renderer:
-            self.iso_renderer.toggle_item_labels()
+        if self.world_renderer:
+            self.world_renderer.toggle_item_labels()
             self._sync_view_controls()
 
     def _toggle_follow(self):
-        if self.iso_renderer:
-            self.iso_renderer.toggle_follow()
+        if self.world_renderer:
+            self.world_renderer.toggle_follow()
             self._sync_view_controls()
 
     def _sync_view_controls(self):
-        renderer = self.iso_renderer
+        renderer = self.world_renderer
         if not renderer:
             for button in (getattr(self, "coordinate_button", None), getattr(self, "item_label_button", None), getattr(self, "follow_button", None)):
                 if button:
@@ -524,9 +524,9 @@ class FactoryGameApp:
 
         scale_var = tk.StringVar(value=f"{round(float(self.ui_preferences.get('ui_scale', 1.0)) * 100)} %")
         reduced_var = tk.BooleanVar(value=bool(self.ui_preferences.get("reduced_motion", False)))
-        coordinate_var = tk.BooleanVar(value=bool(self.iso_renderer and self.iso_renderer.show_coordinates))
-        labels_var = tk.BooleanVar(value=bool(self.iso_renderer and self.iso_renderer.show_item_labels))
-        follow_var = tk.BooleanVar(value=bool(self.iso_renderer and self.iso_renderer.follow_drone))
+        coordinate_var = tk.BooleanVar(value=bool(self.world_renderer and self.world_renderer.show_coordinates))
+        labels_var = tk.BooleanVar(value=bool(self.world_renderer and self.world_renderer.show_item_labels))
+        follow_var = tk.BooleanVar(value=bool(self.world_renderer and self.world_renderer.follow_drone))
 
         row = tk.Frame(window, bg=PANEL)
         row.pack(fill="x", padx=20, pady=6)
@@ -545,12 +545,12 @@ class FactoryGameApp:
             self.ui_preferences["ui_scale"] = scale
             self.ui_preferences["reduced_motion"] = reduced_var.get()
             self.root.tk.call("tk", "scaling", self.system_tk_scaling * scale)
-            if self.iso_renderer:
-                self.iso_renderer.reduced_motion = reduced_var.get()
-                self.iso_renderer.show_coordinates = coordinate_var.get()
-                self.iso_renderer.show_item_labels = labels_var.get()
-                self.iso_renderer.follow_drone = follow_var.get()
-                self.iso_renderer.invalidate_static()
+            if self.world_renderer:
+                self.world_renderer.reduced_motion = reduced_var.get()
+                self.world_renderer.show_coordinates = coordinate_var.get()
+                self.world_renderer.show_item_labels = labels_var.get()
+                self.world_renderer.follow_drone = follow_var.get()
+                self.world_renderer.invalidate_static()
             self._sync_view_controls()
             self._save_ui_preferences()
             self.store.save(self.progress)
@@ -562,8 +562,8 @@ class FactoryGameApp:
     def _save_ui_preferences(self):
         preferences = dict(self.progress.get("ui_preferences", {}))
         preferences["ui_scale"] = float(self.ui_preferences.get("ui_scale", 1.0))
-        if self.iso_renderer:
-            preferences.update(self.iso_renderer.preferences())
+        if self.world_renderer:
+            preferences.update(self.world_renderer.preferences())
         self.ui_preferences = preferences
         self.progress["ui_preferences"] = preferences
 
@@ -788,8 +788,8 @@ class FactoryGameApp:
     def _on_canvas_click(self, event):
         if self.mode != "factory" or self.factory_simulation is None:
             return
-        if self.iso_renderer:
-            tile = self.iso_renderer.tile_at(event.x, event.y)
+        if self.world_renderer:
+            tile = self.world_renderer.tile_at(event.x, event.y)
             if tile is None:
                 return
             x, y = tile
@@ -826,8 +826,8 @@ class FactoryGameApp:
             self._show_toast(str(error), RED)
 
     def _draw_world(self):
-        if self.iso_renderer:
-            self.iso_renderer.set_state(self.simulation.state, self.simulation.WAREHOUSE, self.simulation.SHIPPING, self.speed.get())
+        if self.world_renderer:
+            self.world_renderer.set_state(self.simulation.state, self.simulation.WAREHOUSE, self.simulation.SHIPPING, self.speed.get())
             return
         self._draw_world_legacy()
 

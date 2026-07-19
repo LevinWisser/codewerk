@@ -3,27 +3,29 @@
 ## Direction
 
 CODEWERK is a clean, modern and friendly automation lab. The factory is rendered
-in fixed 2:1 isometric projection while simulation coordinates remain the normal
-orthogonal `(x, y)` grid. The visual references are the clarity of Good Company
-and Big Pharma: light modular floors, matte equipment, dark mechanics and small
-semantic light accents. The code editor and console remain dark focus surfaces.
+through a fixed elevated perspective camera while simulation coordinates remain
+the normal orthogonal `(x, y)` grid. The camera cannot rotate; zoom, pan and
+optional drone follow preserve orientation. Light modular floors, matte ceramic
+equipment, dark mechanics and small semantic light accents create the Aqua Lab
+language. The code editor and console remain dark focus surfaces.
 
 The grid and programming challenge stay authoritative. Rendering must never add
 automatic routes, hidden position constants, or delays to player Python.
 
 ## World language
 
-- A logical tile is 128 x 64 pixels at 100 percent zoom; runtime masters are 2x.
-- `(0, 0)` starts at the top of the isometric diamond. X grows down-right and Y
-  grows down-left.
+- `(0, 0)` starts at the rear-left of the perspective platform. X grows right
+  and Y grows toward the viewer, matching the normal screen-grid convention.
+- Blender exports 8 x 8, 10 x 10 and 12 x 12 hall backgrounds together with
+  normalized tile polygons. Runtime hit testing uses these authored polygons.
 - Machines occupy exactly one logical tile, have a fixed orientation and use
   individual silhouettes. Shared matte shells, dark mechanics, universal ports
   and an integrated status light keep the family coherent.
 - The press exposes its ram, the mill its spindle, the wire drawer its rollers,
   injection molding its cylinder and die, and assembly its paired tool arms.
-- The drone is a compact hovering service unit without a face. Tilt, antenna and
-  status light provide restrained personality. On a machine it uses a visual
-  front service dock while its shadow and cyan link retain the true coordinate.
+- The drone is a compact hovering service unit without a face. Rotors, a copper
+  cap and cyan status light provide restrained personality. Its shadow retains
+  the true logical coordinate while the body floats above machines and tiles.
 - Items are neutral carriers with filled holographic glyphs. Color identifies
   material family; silhouette identifies processing stage. Labels appear on
   hover or through a global accessibility toggle.
@@ -53,12 +55,13 @@ camera easing.
 ## Asset and renderer contracts
 
 Editable sources live under `assets/source`, runtime PNGs under `assets/runtime`,
-and anchors, footprints and frame metadata in `assets/manifests/assets.json`.
-Sources and exports are both versioned. Inkscape and Krita are the recommended
-production tools; image generation may assist concepts but is not a source of
-final runtime artwork.
+and anchors, footprints and frame metadata in manifests. Blender 4.5 LTS and the
+checked-in Python generator are authoritative for the fixed-view world, machine,
+station and drone assets. Inkscape and Krita remain appropriate for UI and item
+graphics. Sources and exports are both versioned.
 
 Tkinter remains the UI framework and Pillow provides alpha-aware scaling and
 sprite caching. The renderer consumes simulation snapshots, owns camera and
-presentation interpolation, sorts entities by `(x + y, elevation, layer)`, and
-performs inverse isometric hit testing. It must not mutate simulation state.
+presentation interpolation, sorts entities from rear to front by `(y, layer)`,
+and performs polygon-based perspective hit testing. It must not mutate
+simulation state.

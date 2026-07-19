@@ -1,6 +1,7 @@
 import unittest
 
 from factory_game.design import ROOT, asset_manifest, design_tokens
+from factory_game.fixed_renderer import fixed_layouts, point_in_polygon
 from factory_game.iso_renderer import project_iso, unproject_iso
 
 
@@ -39,6 +40,41 @@ class AssetTests(unittest.TestCase):
         geometry = design_tokens()["geometry"]
         self.assertEqual(geometry["tile_width"], geometry["tile_height"] * 2)
         self.assertEqual(geometry["asset_scale"], 2)
+
+    def test_fixed_view_layouts_cover_every_factory_size(self):
+        from PIL import Image
+
+        layouts = fixed_layouts()
+        self.assertEqual(set(layouts), {"8", "10", "12"})
+        for size_text, layout in layouts.items():
+            size = int(size_text)
+            self.assertEqual(len(layout["tiles"]), size * size)
+            image_path = ROOT / layout["image"]
+            self.assertTrue(image_path.is_file())
+            with Image.open(image_path) as image:
+                self.assertEqual(list(image.size), layout["render_size"])
+                self.assertEqual(image.mode, "RGBA")
+
+    def test_fixed_view_sprite_family_has_transparency(self):
+        from PIL import Image
+
+        root = ROOT / "assets" / "runtime" / "fixed"
+        sprites = [path for path in root.rglob("*.png") if path.parent.name != "world"]
+        self.assertEqual(len(sprites), 8)
+        for path in sprites:
+            with Image.open(path) as image:
+                self.assertEqual(image.mode, "RGBA", path.name)
+                self.assertEqual(image.getchannel("A").getextrema(), (0, 255), path.name)
+
+    def test_fixed_view_coordinates_and_polygons_match_screen_direction(self):
+        layout = fixed_layouts()["10"]
+        origin = layout["tiles"]["0,0"]["center"]
+        east = layout["tiles"]["1,0"]["center"]
+        south = layout["tiles"]["0,1"]["center"]
+        self.assertGreater(east[0], origin[0])
+        self.assertGreater(south[1], origin[1])
+        polygon = [tuple(point) for point in layout["tiles"]["0,0"]["polygon"]]
+        self.assertTrue(point_in_polygon(tuple(origin), polygon))
 
 
 if __name__ == "__main__":
