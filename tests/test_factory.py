@@ -1,6 +1,7 @@
 import unittest
 
 from factory_game.factory import FactorySimulation
+from factory_game.content import contract_duration
 from factory_game.simulation import GameError
 
 
@@ -76,6 +77,13 @@ class FactoryEconomyTests(unittest.TestCase):
 
 
 class ContractTests(unittest.TestCase):
+    def test_contract_deadlines_scale_with_product_complexity(self):
+        self.assertEqual(contract_duration("plate", 3), 166)
+        self.assertEqual(contract_duration("gear", 3), 240)
+        self.assertEqual(contract_duration("wire", 3), 206)
+        self.assertEqual(contract_duration("housing", 3), 206)
+        self.assertEqual(contract_duration("actuator", 3), 430)
+
     def test_requests_are_deterministic_and_capped(self):
         first = FactorySimulation(seed=123)
         second = FactorySimulation(seed=123)
@@ -156,6 +164,29 @@ class ContractTests(unittest.TestCase):
         restored = FactorySimulation.from_save_data(factory.to_save_data(), 0)
         self.assertEqual(restored.snapshot(), factory.snapshot())
         self.assertEqual(restored.get_orders(), factory.get_orders())
+
+    def test_old_contracts_receive_the_longer_deadlines_on_load(self):
+        factory = FactorySimulation()
+        request_id = next(iter(factory.requests))
+        factory.execute("accept_request", [request_id])
+        saved = factory.to_save_data()
+        saved.pop("contract_balance_version")
+
+        open_request = next(iter(saved["requests"].values()))
+        open_request.update({"product": "actuator", "quantity": 3, "duration": 166})
+        order = next(iter(saved["orders"].values()))
+        order.update({
+            "product": "actuator", "quantity": 3, "duration": 166,
+            "accepted_tick": 0, "deadline_tick": 166,
+        })
+
+        restored = FactorySimulation.from_save_data(saved, 0)
+
+        self.assertEqual(next(iter(restored.requests.values()))["duration"], 430)
+        restored_order = next(iter(restored.orders.values()))
+        self.assertEqual(restored_order["duration"], 430)
+        self.assertEqual(restored_order["deadline_tick"], 430)
+        self.assertEqual(restored.contract_balance_version, FactorySimulation.CONTRACT_BALANCE_VERSION)
 
     def test_saved_machine_display_names_are_normalized_to_english(self):
         factory = FactorySimulation(credits=2000)

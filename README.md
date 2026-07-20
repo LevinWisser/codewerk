@@ -85,7 +85,7 @@ for order_id, order in orders.items():
         ship(order_id)
 ```
 
-Late orders remain deliverable and pay their base payout; only the on-time bonus is lost.
+Bonus deadlines scale with production complexity, so multi-stage products such as actuators receive substantially more time than plates. Late orders remain deliverable and pay their base payout; only the on-time bonus is lost.
 
 ## Multiple Files
 

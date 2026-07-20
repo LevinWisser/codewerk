@@ -33,6 +33,21 @@ FACTORY_MACHINE_DEFINITIONS = {
 
 RAW_MATERIAL_PRICES = {"steel": 10, "copper": 12, "polymer": 8}
 
+# Base time plus time per requested unit. More complex production chains receive
+# substantially more routing and processing time than single-machine products.
+CONTRACT_DURATION_RULES = {
+    "plate": (100, 22),
+    "gear": (120, 40),
+    "wire": (110, 32),
+    "housing": (110, 32),
+    "actuator": (160, 90),
+}
+
+
+def contract_duration(product: str, quantity: int) -> int:
+    base, per_item = CONTRACT_DURATION_RULES[product]
+    return base + per_item * quantity
+
 MISSIONS = [
     Mission("boot", "01  System Start", "The maintenance drone is responding again. Move it two tiles east.", "Commands run from top to bottom.", "Reach position (3, 1).", "move(East)\nmove(East)\n", ["move", "directions"], {"position": [3, 1]}, 100),
     Mission("delivery", "02  First Delivery", "Pick up steel at the input warehouse and take it to shipping.", "The drone can carry exactly one item.", "Deliver 1 steel.", "move(South)\npick_up()\n# Move to shipping\n", ["move", "directions", "pick_up", "drop"], {"delivered": {"steel": 1}}, 150),
@@ -63,7 +78,7 @@ HELP = {
     "wait": ("wait(ticks=1)", "Advances simulation ticks so machines can operate.", "wait(3)"),
     "all": ("API Overview", "The final tutorial unlocks every command introduced so far.", "x, y = get_position()"),
     "files": ("Files and Imports", "Add Python files with +. main.py is the entry point. Local modules support normal imports and from module import *; external packages remain blocked.", "# positions.py\nPRESS = (3, 2)\n\n# main.py\nfrom positions import *\nget_to_pos(PRESS)"),
-    "contracts": ("Requests and Orders", "get_requests() returns up to eight open offers. After accept_request(id), the contract appears in get_orders(). ticks_left shows the remaining bonus deadline. Requests remain until accepted or rejected; active orders can be cancelled with cancel_order(id).", "for request_id, request in get_requests().items():\n    if request['base_payout'] > 100:\n        accept_request(request_id)"),
+    "contracts": ("Requests and Orders", "get_requests() returns up to eight open offers. After accept_request(id), the contract appears in get_orders(). ticks_left shows the remaining bonus deadline. Complex products receive longer deadlines for their additional production steps. Requests remain until accepted or rejected; active orders can be cancelled with cancel_order(id).", "for request_id, request in get_requests().items():\n    if request['base_payout'] > 100:\n        accept_request(request_id)"),
     "get_requests": ("get_requests()", "Returns a dictionary snapshot of all open requests indexed by request ID. Each entry includes product, quantity, base_payout, on_time_bonus, and duration.", "requests = get_requests()"),
     "get_orders": ("get_orders()", "Returns all active orders. ticks_left is recalculated on every query and reaches zero when late.", "orders = get_orders()"),
     "accept_request": ("accept_request(request_id)", "Accepts an open request, starts its bonus deadline, and consumes one tick.", "accept_request('REQ-0001')"),

@@ -5,7 +5,7 @@ from copy import deepcopy
 import random
 from typing import Any
 
-from factory_game.content import DIRECTIONS, FACTORY_MACHINE_DEFINITIONS, RAW_MATERIAL_PRICES
+from factory_game.content import DIRECTIONS, FACTORY_MACHINE_DEFINITIONS, RAW_MATERIAL_PRICES, contract_duration
 from factory_game.models import Machine, WorldState
 from factory_game.simulation import GameError
 
@@ -15,6 +15,7 @@ class FactorySimulation:
     SHIPPING = (8, 8)
     REQUEST_LIMIT = 8
     REFILL_DELAY = 15
+    CONTRACT_BALANCE_VERSION = 2
 
     def __init__(self, credits: int = 3220, seed: int = 481516):
         self.state = WorldState(size=10, machines=[])
@@ -28,6 +29,7 @@ class FactorySimulation:
         self.request_sequence = 0
         self.refill_remaining = 0
         self.recovery_grants = 0
+        self.contract_balance_version = self.CONTRACT_BALANCE_VERSION
         self._fill_requests(initial=True)
 
     @property
@@ -309,7 +311,7 @@ class FactorySimulation:
             self.requests[request_id] = {
                 "id": request_id, "product": product, "quantity": quantity,
                 "base_payout": base, "on_time_bonus": max(20, base // 4),
-                "duration": 100 + quantity * 22,
+                "duration": contract_duration(product, quantity),
             }
 
     def _maybe_recovery_grant(self) -> None:
@@ -367,6 +369,7 @@ class FactorySimulation:
             "requests": self.requests, "orders": self.orders, "completed_orders": self.completed_orders,
             "request_seed": self.request_seed, "request_sequence": self.request_sequence,
             "refill_remaining": self.refill_remaining, "recovery_grants": self.recovery_grants,
+            "contract_balance_version": self.contract_balance_version,
         }
 
     @classmethod
@@ -397,6 +400,17 @@ class FactorySimulation:
         factory.request_sequence = data.get("request_sequence", len(factory.requests))
         factory.refill_remaining = data.get("refill_remaining", 0)
         factory.recovery_grants = data.get("recovery_grants", 0)
+        factory.contract_balance_version = data.get("contract_balance_version", 1)
+        if factory.contract_balance_version < cls.CONTRACT_BALANCE_VERSION:
+            for request in factory.requests.values():
+                request["duration"] = contract_duration(request["product"], request["quantity"])
+            for order in factory.orders.values():
+                old_duration = order.get("duration", 0)
+                new_duration = contract_duration(order["product"], order["quantity"])
+                extension = max(0, new_duration - old_duration)
+                order["duration"] = new_duration
+                order["deadline_tick"] = order.get("deadline_tick", order.get("accepted_tick", 0) + old_duration) + extension
+            factory.contract_balance_version = cls.CONTRACT_BALANCE_VERSION
         if not factory.requests:
             factory._fill_requests(initial=True)
         return factory
