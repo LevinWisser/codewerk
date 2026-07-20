@@ -9,11 +9,11 @@ import types
 
 BLOCKED_NAMES = {"__import__", "eval", "exec", "compile", "open", "input", "globals", "locals", "vars", "breakpoint", "help", "dir", "getattr", "setattr", "delattr"}
 API_NAMES = [
-    "move", "pick_up", "drop", "get_position", "get_inventory", "get_item_type",
+    "move", "pick_up", "drop", "discard_item", "get_position", "get_inventory", "get_item_type",
     "can_move", "can_pick_up", "load_machine", "start_machine", "machine_is_done",
     "collect_output", "wait", "buy", "get_credits", "get_input_stock",
     "get_shipping_stock", "get_requests", "get_orders", "accept_request",
-    "reject_request", "ship", "get_tick",
+    "reject_request", "cancel_order", "ship", "get_tick",
 ]
 request_id = 0
 project_filenames = set()
@@ -31,20 +31,20 @@ class Validator(ast.NodeVisitor):
     def visit_Import(self, node):
         for alias in node.names:
             if alias.name not in self.allowed_modules:
-                raise ValueError(f"Nur lokale Projektdateien duerfen importiert werden: '{alias.name}' wurde nicht gefunden.")
+                raise ValueError(f"Only local project files may be imported: '{alias.name}' was not found.")
 
     def visit_ImportFrom(self, node):
         if node.level or not node.module or node.module not in self.allowed_modules:
-            raise ValueError("Nur absolute Imports aus lokalen Projektdateien sind erlaubt.")
+            raise ValueError("Only absolute imports from local project files are allowed.")
 
     def visit_Name(self, node):
         if node.id in BLOCKED_NAMES or node.id.startswith("__"):
-            raise ValueError(f"'{node.id}' ist in der Fabriksteuerung nicht verfuegbar.")
+            raise ValueError(f"'{node.id}' is not available in the factory controller.")
         self.generic_visit(node)
 
     def visit_Attribute(self, node):
         if node.attr.startswith("_"):
-            raise ValueError("Interne Attribute sind nicht verfuegbar.")
+            raise ValueError("Internal attributes are not available.")
         self.generic_visit(node)
 
 
@@ -61,9 +61,9 @@ def call_api(name, *args):
     send({"type": "call", "id": request_id, "command": name, "args": list(args)})
     response = receive()
     if response.get("type") != "result" or response.get("id") != request_id:
-        raise RuntimeError("Die Verbindung zur Simulation wurde unterbrochen.")
+        raise RuntimeError("The connection to the simulation was interrupted.")
     if not response.get("ok"):
-        raise RuntimeError(response.get("error", "Spielbefehl fehlgeschlagen."))
+        raise RuntimeError(response.get("error", "Game command failed."))
     value = response.get("value")
     if name == "get_position" and isinstance(value, list):
         return tuple(value)
@@ -83,13 +83,13 @@ def trace_lines(frame, event, arg):
 def run(files, entry="main.py"):
     global project_filenames
     if entry not in files:
-        raise ValueError("Das Projekt benoetigt eine main.py als Einstiegspunkt.")
+        raise ValueError("The project requires main.py as its entry point.")
     modules = {filename[:-3]: source for filename, source in files.items() if filename.endswith(".py") and filename != entry}
     project_filenames = set(files)
     trees = {}
     for filename, source in files.items():
         if not filename.endswith(".py"):
-            raise ValueError(f"Ungueltige Projektdatei: {filename}")
+            raise ValueError(f"Invalid project file: {filename}")
         tree = ast.parse(source, filename=filename)
         Validator(modules).visit(tree)
         trees[filename] = tree
@@ -111,7 +111,7 @@ def run(files, entry="main.py"):
         if name in module_cache:
             return module_cache[name]
         if name not in modules:
-            raise ImportError(f"Lokale Datei {name}.py wurde nicht gefunden.")
+            raise ImportError(f"Local file {name}.py was not found.")
         module = types.ModuleType(name)
         module_cache[name] = module
         namespace = module.__dict__
@@ -126,7 +126,7 @@ def run(files, entry="main.py"):
 
     def local_import(name, globals=None, locals=None, fromlist=(), level=0):
         if level or name not in modules:
-            raise ImportError(f"Nur lokale Projektdateien koennen importiert werden: {name}")
+            raise ImportError(f"Only local project files can be imported: {name}")
         return execute_module(name)
 
     safe_builtins["__import__"] = local_import

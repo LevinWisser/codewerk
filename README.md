@@ -1,12 +1,12 @@
 # CODEWERK
 
-CODEWERK ist ein spielbarer Vertical Slice eines 2D-Automatisierungsspiels. Eine Drohne wird mit echtem, kontrolliert ausgefuehrtem Python gesteuert, um eine Rasterfabrik zu versorgen und Produktionsauftraege zu erfuellen.
+CODEWERK is a playable vertical slice of a 2D factory automation game. The player controls a drone with real, safely executed Python to supply a grid-based factory and fulfill production orders.
 
-Entwicklungsregeln und Architektur stehen in [AGENTS.md](AGENTS.md). Die Produktvision und geplanten Kapitel stehen in [docs/ROADMAP.md](docs/ROADMAP.md).
+Development rules and architecture are documented in [AGENTS.md](AGENTS.md). Product direction and planned chapters are described in [docs/ROADMAP.md](docs/ROADMAP.md).
 
-## Start
+## Getting Started
 
-Voraussetzung ist Python 3.11 oder neuer mit Tkinter und Pillow. Die Projektinstallation richtet Pillow automatisch ein:
+CODEWERK requires Python 3.11 or newer with Tkinter and Pillow. Installing the project automatically installs Pillow:
 
 ```powershell
 python -m pip install -e .
@@ -16,24 +16,24 @@ python -m pip install -e .
 python main.py
 ```
 
-## Enthalten
+## Features
 
-- acht aufeinander aufbauende Tutorialauftraege
-- persistente Hauptfabrik nach Tutorial 8 mit parallelen Auftraegen und freiem Maschinenbau
-- feste perspektivische 2.5D-Fabrikansicht mit Zoom, Pan, Koordinaten-Hover und optionalem Drohnen-Follow
-- Aqua-Lab-Designsystem mit transparenten Maschinensprites, Item-Hologrammen und adaptiver Bewegungsanimation
-- barrierearme Ansichtsoptionen fuer reduzierte Bewegung, Koordinaten und Itemlabels
-- Materiallager, Presse, Fraese, Montage und Versand
-- integrierter Python-Editor mit Start, Pause, Einzelschritt und Tempo
-- IntelliSense fuer Spielbefehle, Python-Schluesselwoerter, Variablen und eigene Funktionen (`Ctrl+Leertaste`)
-- umbrochene, scrollbar dargestellte IntelliSense-Dokumentation und Syntaxfarben nach Symboltyp
-- frei verschiebbares und skalierbares Konsolenfenster mit automatischem Scrollen zur neuesten Ausgabe
-- mehrere Python-Dateien pro Auftrag mit Tabs und lokalen `import`-/`from ... import ...`-Anweisungen
-- tutorialweite Hilfsdateien: Module wie `functions.py` bleiben beim Wechsel der Aufgabe erhalten
-- separater Python-Worker mit eingeschraenkten Systemzugriffen
-- durchsuchbare, progressiv freigeschaltete Hilfe mit Codebeispielen
-- persistente Credits, Freischaltungen und Programme
-- deterministische Simulation und automatisierte Tests
+- eight progressive tutorial missions
+- a persistent main factory after tutorial 8 with parallel orders and free machine placement
+- a fixed-perspective 2.5D factory view with zoom, pan, coordinate hover, and optional drone follow
+- an Aqua Lab design system with transparent machine sprites, item holograms, and adaptive movement animation
+- accessible view options for reduced motion, coordinates, and item labels
+- input warehouse, press, mill, assembly, and shipping
+- an integrated Python editor with run, pause, single-step, and speed controls
+- IntelliSense for game commands, Python keywords, variables, and custom functions (`Ctrl+Space`)
+- wrapped, scrollable IntelliSense documentation and symbol-aware syntax colors
+- a separate movable and resizable console window that follows the latest output
+- multiple Python files per project with tabs and local `import` and `from ... import ...` support
+- tutorial-wide helper files: modules such as `functions.py` survive mission changes
+- a separate Python worker with restricted system access
+- searchable, progressively unlocked help with code examples
+- persistent credits, unlocks, and programs
+- deterministic simulation and automated tests
 
 ## Tests
 
@@ -41,15 +41,15 @@ python main.py
 python -m unittest discover -v
 ```
 
-Der Spielstand liegt unter `~/.codewerk/save.json`.
+The save file is stored at `~/.codewerk/save.json`.
 
-Die feste 3D-Laboransicht ist die Standarddarstellung und kann nicht rotiert werden. Fuer Vergleich und Fehlersuche kann der einfache Rasterrenderer intern mit `CODEWERK_LEGACY_RENDERER=1` aktiviert werden. UI- und Itemassets werden mit `python scripts/export_assets.py` erzeugt; die Blender-Szene und Fixed-View-Assets mit Blender 4.5 LTS und `scripts/blender_aqua_lab_poc.py`. Die Gestaltungsregeln stehen in [docs/VISUAL_DESIGN_SYSTEM.md](docs/VISUAL_DESIGN_SYSTEM.md).
+The fixed 3D lab view is the default and cannot be rotated. For comparison and debugging, the simple grid renderer can be enabled internally with `CODEWERK_LEGACY_RENDERER=1`. UI and item assets are generated with `python scripts/export_assets.py`; the Blender scene and fixed-view assets are generated with Blender 4.5 LTS and `scripts/blender_aqua_lab_poc.py`. Visual rules are documented in [docs/VISUAL_DESIGN_SYSTEM.md](docs/VISUAL_DESIGN_SYSTEM.md).
 
-## Hauptfabrik
+## Main Factory
 
-Nach Abschluss des Tutorials startet eine leere `10 x 10`-Halle. `main.py` ist neu, alle selbst erstellten Hilfsdateien bleiben erhalten. Maschinen werden im Baumodus gekauft und frei platziert. Nach zwölf abgeschlossenen Auftraegen einschließlich eines Aktuators erweitert sich die Halle auf `12 x 12`.
+After completing the tutorial, the player enters an empty `10 x 10` factory. Its `main.py` starts fresh while all player-created helper files remain available. Machines are purchased and freely placed in Build Mode. After twelve completed orders, including an actuator delivery, the factory expands to `12 x 12`.
 
-Bis zu acht Kundenanfragen sind gleichzeitig sichtbar. Anfragen koennen ueber die UI oder Python angenommen und abgelehnt werden; aktive Auftraege sind nicht begrenzt:
+Up to eight customer requests are visible at once. Requests can be accepted or rejected through the UI or Python; active orders are unlimited:
 
 ```python
 requests = get_requests()
@@ -59,16 +59,22 @@ for request_id, request in requests.items():
         accept_request(request_id)
 ```
 
-Rohstoffe werden ausschliesslich per Code gekauft. Jeder Kauf betrifft ein Teil und kostet einen Tick:
+An accepted order can be cancelled without a penalty. Items already produced or stored remain unchanged:
+
+```python
+cancel_order("ORD-0001")
+```
+
+Raw materials are purchased exclusively through code. Each purchase buys one item and consumes one tick:
 
 ```python
 while get_input_stock("steel") < 5:
     buy("steel")
 
-pick_up("steel")  # auf dem Eingangslager
+pick_up("steel")  # At the input warehouse
 ```
 
-`drop()` legt Produkte am Versandfeld in ein unbegrenztes Versandlager. Ein Auftrag wird nur vollstaendig und nur auf dem Versandfeld ausgeliefert:
+`drop()` stores products in the unlimited shipping warehouse when used on the shipping tile. An order can only be shipped in full and only from that tile:
 
 ```python
 orders = get_orders()
@@ -79,11 +85,11 @@ for order_id, order in orders.items():
         ship(order_id)
 ```
 
-Verspaetete Auftraege bleiben lieferbar und zahlen ihre Grundverguetung; lediglich der Puenktlichkeitsbonus entfaellt.
+Late orders remain deliverable and pay their base payout; only the on-time bonus is lost.
 
-## Mehrere Dateien
+## Multiple Files
 
-`main.py` ist der Einstiegspunkt. Ueber `+` lassen sich weitere Module anlegen:
+`main.py` is the entry point. Use `+` to create more modules:
 
 ```python
 # paths.py
@@ -95,12 +101,19 @@ from paths import go_east
 go_east()
 ```
 
-Nur Dateien des aktuellen Spielprojekts koennen importiert werden. Externe Python-Pakete und Systemmodule bleiben aus Sicherheitsgruenden gesperrt.
+Only files in the current game project may be imported. External Python packages and system modules remain blocked for security.
 
-Lokale Stern-Imports wie `from positions import *` sind erlaubt. Dabei gelten die normalen Python-Regeln: Namen, die mit einem Unterstrich beginnen, werden ohne explizites `__all__` nicht importiert.
+Local star imports such as `from positions import *` are supported and follow normal Python rules: without an explicit `__all__`, names beginning with an underscore are not imported.
 
-`pick_up()` nimmt sowohl aus dem Materiallager als auch aus fertigen Maschinen auf. `drop()` liefert je nach aktuellem Feld an eine Maschine oder den Versand. Maschinenrezepte und Verarbeitungszeiten stehen in der integrierten Hilfe.
+`pick_up()` collects from machine outputs, while `pick_up(item)` selects a raw material at the main-factory input warehouse. `drop()` loads a machine or stores an item at shipping. Machine recipes and processing times are listed in the built-in help.
 
-## Ausfuehrungszustand
+If a failed program leaves the wrong item in the drone, discard it through code or with **CLEAR CARGO**:
 
-Ein erneuter Start setzt die Fabrik nicht zurueck. Das naechste Programm arbeitet mit der aktuellen Position, Maschinenbelegung und Lieferung weiter. Der `↻`-Button setzt den laufenden Auftrag bewusst auf seinen Anfangszustand zurueck; der Quellcode bleibt erhalten.
+```python
+if get_inventory() is not None:
+    discard_item()
+```
+
+## Execution State
+
+Starting a program again does not reset the factory. The next run continues with the current drone position, machine state, and deliveries. The `↻` button explicitly resets the current tutorial mission to its initial world state while preserving the source code.

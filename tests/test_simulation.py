@@ -57,6 +57,17 @@ class SimulationTests(unittest.TestCase):
         self.assertEqual(simulation.state.delivered, {"steel": 1})
         self.assertTrue(simulation.mission_complete())
 
+    def test_discard_item_clears_tutorial_inventory(self):
+        simulation = Simulation(MISSIONS[1])
+        move_to(simulation, *simulation.WAREHOUSE)
+        simulation.execute("pick_up", [])
+        before_tick = simulation.state.ticks
+
+        simulation.execute("discard_item", [])
+
+        self.assertIsNone(simulation.state.inventory)
+        self.assertEqual(simulation.state.ticks, before_tick + 1)
+
     def test_press_recipe(self):
         simulation = Simulation(MISSIONS[3])
         make_product(simulation, (3, 2), ["steel"])

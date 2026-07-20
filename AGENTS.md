@@ -4,7 +4,7 @@ This file is the authoritative handoff for coding agents working in this reposit
 
 ## Project State
 
-- Product: CODEWERK, a German-language 2D factory automation game controlled with standard Python syntax.
+- Product: CODEWERK, an English-language 2D factory automation game controlled with standard Python syntax.
 - Current version: `0.3.0`.
 - Runtime: Python 3.11+, Tkinter, Pillow.
 - Entry point: `main.py`.
@@ -25,7 +25,7 @@ This file is the authoritative handoff for coding agents working in this reposit
 - Late orders remain deliverable for base payout; only the on-time bonus is lost.
 - Requests stay until accepted or rejected. At most eight are open; active orders are unlimited.
 - Economy must remain recoverable. Do not introduce irreversible bankruptcy or mandatory hard failure without an explicit design decision.
-- Keep the German UI and help text, but keep Python API names in English.
+- Keep all player-facing UI, help, tutorials, errors, and documentation in English, matching the English Python API names.
 
 ## Architecture
 
@@ -66,12 +66,14 @@ get_requests()
 get_orders()
 accept_request(request_id)
 reject_request(request_id)
+cancel_order(order_id)
 buy(item)
 get_credits()
 get_input_stock(item=None)
 get_shipping_stock(item=None)
 ship(order_id)
 get_tick()
+discard_item()
 ```
 
 Existing movement, inventory, machine, sensor, wait, and direction APIs remain available. `load_machine()` and `collect_output()` exist only for compatibility with old saved code; do not teach or promote them in new content.

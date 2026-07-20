@@ -29,31 +29,33 @@ SYNTAX_COLORS = {
 }
 
 API_COMPLETIONS = {
-    "move": "move(direction) - Drohne ein Feld bewegen",
-    "pick_up": "pick_up() - Teil aufnehmen",
-    "drop": "drop() - Teil im Versand ablegen",
-    "get_position": "get_position() - Position als (x, y)",
-    "get_inventory": "get_inventory() - getragenes Teil",
-    "get_item_type": "get_item_type() - Typ des getragenen Teils",
-    "can_move": "can_move(direction) - Weg pruefen",
-    "can_pick_up": "can_pick_up() - Aufnahme pruefen",
-    "start_machine": "start_machine() - Maschine starten",
-    "machine_is_done": "machine_is_done() - Fertigstatus pruefen",
-    "wait": "wait(ticks=1) - Simulation warten lassen",
-    "buy": "buy(item) - einen Rohstoff bestellen",
-    "get_credits": "get_credits() - aktuelle Credits",
-    "get_input_stock": "get_input_stock(item=None) - Eingangslager abfragen",
-    "get_shipping_stock": "get_shipping_stock(item=None) - Versandlager abfragen",
-    "get_requests": "get_requests() - offene Kundenanfragen",
-    "get_orders": "get_orders() - aktive Auftraege",
-    "accept_request": "accept_request(request_id) - Anfrage annehmen",
-    "reject_request": "reject_request(request_id) - Anfrage ablehnen",
-    "ship": "ship(order_id) - Auftrag komplett ausliefern",
-    "get_tick": "get_tick() - aktuellen Fabriktick abfragen",
-    "North": "North - Richtung nach oben",
-    "East": "East - Richtung nach rechts",
-    "South": "South - Richtung nach unten",
-    "West": "West - Richtung nach links",
+    "move": "move(direction) - move the drone by one tile",
+    "pick_up": "pick_up(item=None) - pick up an item",
+    "drop": "drop() - load a machine or store an item for shipping",
+    "discard_item": "discard_item() - discard the carried item",
+    "get_position": "get_position() - current position as (x, y)",
+    "get_inventory": "get_inventory() - currently carried item",
+    "get_item_type": "get_item_type() - type of the carried item",
+    "can_move": "can_move(direction) - check whether a path is open",
+    "can_pick_up": "can_pick_up(item=None) - check whether an item can be picked up",
+    "start_machine": "start_machine() - start the current machine",
+    "machine_is_done": "machine_is_done() - check whether output is ready",
+    "wait": "wait(ticks=1) - advance simulation ticks",
+    "buy": "buy(item) - purchase one raw material",
+    "get_credits": "get_credits() - available credits",
+    "get_input_stock": "get_input_stock(item=None) - query input stock",
+    "get_shipping_stock": "get_shipping_stock(item=None) - query shipping stock",
+    "get_requests": "get_requests() - open customer requests",
+    "get_orders": "get_orders() - active orders",
+    "accept_request": "accept_request(request_id) - accept a request",
+    "reject_request": "reject_request(request_id) - reject a request",
+    "cancel_order": "cancel_order(order_id) - cancel an active order",
+    "ship": "ship(order_id) - ship a complete order",
+    "get_tick": "get_tick() - current factory tick",
+    "North": "North - move up",
+    "East": "East - move right",
+    "South": "South - move down",
+    "West": "West - move left",
 }
 
 BUILTIN_COMPLETIONS = {
@@ -113,7 +115,7 @@ class ProjectEditor(tk.Frame):
 
         bar = tk.Frame(self, bg=PANEL)
         bar.pack(fill="x", pady=(0, 5))
-        tk.Label(bar, text="DATEIEN", bg=PANEL, fg=MUTED, font=("Segoe UI Semibold", 8)).pack(side="left")
+        tk.Label(bar, text="FILES", bg=PANEL, fg=MUTED, font=("Segoe UI Semibold", 8)).pack(side="left")
         ttk.Button(bar, text="+", style="Tool.TButton", width=3, command=self.add_file).pack(side="right")
         ttk.Button(bar, text="×", style="Tool.TButton", width=3, command=self.delete_current_file).pack(side="right", padx=(0, 4))
 
@@ -156,14 +158,14 @@ class ProjectEditor(tk.Frame):
             editor.focus_set()
 
     def add_file(self) -> None:
-        name = simpledialog.askstring("Neue Python-Datei", "Dateiname:", parent=self, initialvalue="functions.py")
+        name = simpledialog.askstring("New Python File", "File name:", parent=self, initialvalue="functions.py")
         if not name:
             return
         name = name.strip()
         if not name.endswith(".py"):
             name += ".py"
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*\.py", name):
-            messagebox.showerror("Ungueltiger Dateiname", "Verwende Buchstaben, Zahlen und Unterstriche; der Name muss mit einem Buchstaben oder Unterstrich beginnen.", parent=self)
+            messagebox.showerror("Invalid File Name", "Use letters, numbers, and underscores; the name must start with a letter or underscore.", parent=self)
             return
         if name in self.editors:
             self.select_file(name)
@@ -175,9 +177,9 @@ class ProjectEditor(tk.Frame):
     def delete_current_file(self) -> None:
         name = self.current_name
         if name == "main.py":
-            messagebox.showinfo("main.py", "Die Einstiegsdatei main.py kann nicht geloescht werden.", parent=self)
+            messagebox.showinfo("main.py", "The main.py entry file cannot be deleted.", parent=self)
             return
-        if not messagebox.askyesno("Datei loeschen", f"{name} aus diesem Auftrag loeschen?", parent=self):
+        if not messagebox.askyesno("Delete File", f"Delete {name} from this project?", parent=self):
             return
         frame = self.editors[name].master
         self.notebook.forget(frame)

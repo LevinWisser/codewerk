@@ -47,6 +47,18 @@ class FactoryEconomyTests(unittest.TestCase):
         factory.execute("pick_up", ["copper"])
         self.assertEqual(factory.state.inventory, "copper")
 
+    def test_discard_item_clears_drone_inventory_and_costs_one_tick(self):
+        factory = FactorySimulation()
+        factory.state.inventory = "steel"
+        before_tick = factory.state.ticks
+        factory.execute("discard_item", [])
+        self.assertIsNone(factory.state.inventory)
+        self.assertEqual(factory.state.ticks, before_tick + 1)
+
+        with self.assertRaises(GameError):
+            factory.execute("discard_item", [])
+        self.assertEqual(factory.state.ticks, before_tick + 1)
+
     def test_build_move_and_sell_machine(self):
         factory = FactorySimulation(credits=2000)
         factory.place_machine("press", 3, 2)
@@ -92,6 +104,23 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(factory.get_orders(), before)
         self.assertEqual(factory.shipping_inventory, {})
 
+    def test_accepted_order_can_be_cancelled_without_penalty(self):
+        factory = FactorySimulation()
+        request_id = next(iter(factory.requests))
+        factory.execute("accept_request", [request_id])
+        order_id = request_id.replace("REQ", "ORD", 1)
+        credits = factory.credits
+
+        factory.execute("cancel_order", [order_id])
+
+        self.assertNotIn(order_id, factory.orders)
+        self.assertEqual(factory.credits, credits)
+        self.assertEqual(factory.completed_orders, [])
+        self.assertEqual(factory.refill_remaining, factory.REFILL_DELAY - 1)
+
+        with self.assertRaises(GameError):
+            factory.execute("cancel_order", [order_id])
+
     def test_late_delivery_keeps_base_and_loses_bonus(self):
         factory = FactorySimulation(credits=0)
         request_id = next(iter(factory.requests))
@@ -127,6 +156,16 @@ class ContractTests(unittest.TestCase):
         restored = FactorySimulation.from_save_data(factory.to_save_data(), 0)
         self.assertEqual(restored.snapshot(), factory.snapshot())
         self.assertEqual(restored.get_orders(), factory.get_orders())
+
+    def test_saved_machine_display_names_are_normalized_to_english(self):
+        factory = FactorySimulation(credits=2000)
+        factory.place_machine("press", 3, 2)
+        saved = factory.to_save_data()
+        saved["state"]["machines"][0]["name"] = "Legacy Press Name"
+
+        restored = FactorySimulation.from_save_data(saved, 0)
+
+        self.assertEqual(restored.state.machines[0].name, "Press")
 
 
 if __name__ == "__main__":

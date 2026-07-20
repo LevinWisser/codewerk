@@ -55,7 +55,7 @@ class WorkerTests(unittest.TestCase):
     def test_import_is_rejected(self):
         process = self.start_worker("import os")
         error = self.read_until(process, "error")
-        self.assertIn("lokale Projektdateien", error["message"])
+        self.assertIn("local project files", error["message"])
         process.wait(timeout=2)
 
     def test_local_module_import(self):
@@ -95,6 +95,20 @@ class WorkerTests(unittest.TestCase):
         call = self.read_until(process, "call")
         self.assertEqual(call["command"], "accept_request")
         self.assertEqual(call["args"], ["REQ-0001"])
+        process.stdin.write(json.dumps({"type": "result", "id": call["id"], "ok": True, "value": None}) + "\n")
+        process.stdin.flush()
+        self.read_until(process, "finished")
+        process.wait(timeout=2)
+
+    def test_recovery_apis_are_available(self):
+        process = self.start_worker("discard_item()\ncancel_order('ORD-0001')")
+        call = self.read_until(process, "call")
+        self.assertEqual(call["command"], "discard_item")
+        process.stdin.write(json.dumps({"type": "result", "id": call["id"], "ok": True, "value": None}) + "\n")
+        process.stdin.flush()
+        call = self.read_until(process, "call")
+        self.assertEqual(call["command"], "cancel_order")
+        self.assertEqual(call["args"], ["ORD-0001"])
         process.stdin.write(json.dumps({"type": "result", "id": call["id"], "ok": True, "value": None}) + "\n")
         process.stdin.flush()
         self.read_until(process, "finished")

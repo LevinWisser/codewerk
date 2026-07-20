@@ -15,7 +15,7 @@ class ConsoleWindow:
 
     def __init__(self, master: tk.Tk, geometry: str | None = None):
         self.window = tk.Toplevel(master)
-        self.window.title("CODEWERK // Konsole")
+        self.window.title("CODEWERK // Console")
         self.window.configure(bg=PANEL)
         self.window.geometry(geometry or "760x300+220+620")
         self.window.minsize(420, 180)

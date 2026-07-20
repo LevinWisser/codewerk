@@ -72,6 +72,7 @@ class FactorySimulation:
     def execute(self, command: str, args: list[Any]) -> Any:
         handlers = {
             "move": self._move, "pick_up": self._pick_up, "drop": self._drop,
+            "discard_item": self._discard_item,
             "get_position": self._get_position, "get_inventory": self._get_inventory,
             "get_item_type": self._get_inventory, "can_move": self._can_move,
             "can_pick_up": self._can_pick_up, "start_machine": self._start_machine,
@@ -81,24 +82,25 @@ class FactorySimulation:
             "get_shipping_stock": self._get_shipping_stock,
             "get_requests": self.get_requests, "get_orders": self.get_orders,
             "accept_request": self._accept_request, "reject_request": self._reject_request,
+            "cancel_order": self._cancel_order,
             "ship": self._ship, "get_tick": lambda: self.state.ticks,
             # Compatibility with tutorial-era programs.
             "load_machine": self._load_machine, "collect_output": self._pick_up,
         }
         if command not in handlers:
-            raise GameError(f"Unbekannter Spielbefehl: {command}")
+            raise GameError(f"Unknown game command: {command}")
         result = handlers[command](*args)
-        if command in {"move", "pick_up", "drop", "start_machine", "wait", "buy", "accept_request", "reject_request", "ship", "load_machine", "collect_output"}:
+        if command in {"move", "pick_up", "drop", "discard_item", "start_machine", "wait", "buy", "accept_request", "reject_request", "cancel_order", "ship", "load_machine", "collect_output"}:
             self._tick()
         return result
 
     def _move(self, direction: str) -> None:
         if direction not in DIRECTIONS:
-            raise GameError("move() erwartet North, East, South oder West.")
+            raise GameError("move() expects North, East, South, or West.")
         dx, dy = DIRECTIONS[direction]
         nx, ny = self.state.drone_x + dx, self.state.drone_y + dy
         if not (0 <= nx < self.state.size and 0 <= ny < self.state.size):
-            raise GameError("Der Hallenrand blockiert diesen Weg.")
+            raise GameError("The factory boundary blocks this path.")
         self.state.drone_x, self.state.drone_y = nx, ny
 
     def _can_move(self, direction: str) -> bool:
@@ -111,27 +113,27 @@ class FactorySimulation:
         for machine in self.state.machines:
             if (machine.x, machine.y) == (self.state.drone_x, self.state.drone_y):
                 return machine
-        raise GameError("Die Drohne steht auf keiner Maschine.")
+        raise GameError("The drone is not standing on a machine.")
 
     def _pick_up(self, item: str | None = None) -> None:
         if self.state.inventory is not None:
-            raise GameError("Die Drohne traegt bereits ein Teil.")
+            raise GameError("The drone is already carrying an item.")
         if (self.state.drone_x, self.state.drone_y) == self.WAREHOUSE:
             if item is None:
                 available = [name for name, amount in self.input_inventory.items() if amount > 0]
                 if len(available) != 1:
-                    raise GameError("pick_up(item) benoetigt bei mehreren oder keinen Lagerbestaenden einen Materialtyp.")
+                    raise GameError("pick_up(item) requires a material type when multiple or no materials are in stock.")
                 item = available[0]
             if self.input_inventory.get(item, 0) <= 0:
-                raise GameError(f"Im Eingangslager ist kein '{item}' vorhanden.")
+                raise GameError(f"There is no '{item}' in the input warehouse.")
             self.input_inventory[item] -= 1
             self.state.inventory = item
             return
         machine = self._machine_here()
         if item is not None:
-            raise GameError("An Maschinen wird pick_up() ohne Argument verwendet.")
+            raise GameError("Use pick_up() without an argument at machines.")
         if machine.output is None:
-            raise GameError("Hier liegt kein fertiges Teil bereit.")
+            raise GameError("There is no finished item ready here.")
         self.state.inventory, machine.output = machine.output, None
 
     def _can_pick_up(self, item: str | None = None) -> bool:
@@ -148,7 +150,7 @@ class FactorySimulation:
 
     def _drop(self) -> None:
         if self.state.inventory is None:
-            raise GameError("Die Drohne traegt kein Teil.")
+            raise GameError("The drone is not carrying an item.")
         if (self.state.drone_x, self.state.drone_y) == self.SHIPPING:
             item = self.state.inventory
             self.shipping_inventory[item] = self.shipping_inventory.get(item, 0) + 1
@@ -156,25 +158,30 @@ class FactorySimulation:
             return
         self._load_machine()
 
+    def _discard_item(self) -> None:
+        if self.state.inventory is None:
+            raise GameError("The drone is not carrying an item to discard.")
+        self.state.inventory = None
+
     def _load_machine(self) -> None:
         machine = self._machine_here()
         item = self.state.inventory
         if item is None:
-            raise GameError("Die Drohne traegt kein Teil.")
+            raise GameError("The drone is not carrying an item.")
         needed = Counter(machine.recipe_inputs) - Counter(machine.inputs)
         if needed[item] <= 0:
-            raise GameError(f"{machine.name} benoetigt dieses Teil nicht.")
+            raise GameError(f"{machine.name} does not require this item.")
         if machine.running or machine.output is not None:
-            raise GameError(f"{machine.name} ist nicht bereit zum Beladen.")
+            raise GameError(f"{machine.name} is not ready to be loaded.")
         machine.inputs.append(item)
         self.state.inventory = None
 
     def _start_machine(self) -> None:
         machine = self._machine_here()
         if machine.running or machine.output is not None:
-            raise GameError(f"{machine.name} ist bereits beschaeftigt.")
+            raise GameError(f"{machine.name} is already busy.")
         if Counter(machine.inputs) != Counter(machine.recipe_inputs):
-            raise GameError(f"{machine.name} ist noch nicht vollstaendig beladen.")
+            raise GameError(f"{machine.name} is not fully loaded yet.")
         machine.inputs.clear()
         machine.remaining = machine.duration + 1
 
@@ -183,7 +190,7 @@ class FactorySimulation:
 
     def _wait(self, ticks: int = 1) -> None:
         if not isinstance(ticks, int) or not 1 <= ticks <= 100:
-            raise GameError("wait() erwartet 1 bis 100 Ticks.")
+            raise GameError("wait() expects between 1 and 100 ticks.")
         for _ in range(ticks - 1):
             self._tick()
 
@@ -195,10 +202,10 @@ class FactorySimulation:
 
     def _buy(self, item: str) -> None:
         if item not in RAW_MATERIAL_PRICES:
-            raise GameError(f"'{item}' ist kein kaufbarer Rohstoff.")
+            raise GameError(f"'{item}' is not a purchasable raw material.")
         price = RAW_MATERIAL_PRICES[item]
         if self.credits < price:
-            raise GameError(f"Nicht genug Credits: {item} kostet {price}.")
+            raise GameError(f"Not enough credits: {item} costs {price}.")
         self.credits -= price
         self.input_inventory[item] = self.input_inventory.get(item, 0) + 1
 
@@ -219,7 +226,7 @@ class FactorySimulation:
 
     def _accept_request(self, request_id: str) -> None:
         if request_id not in self.requests:
-            raise GameError(f"Anfrage '{request_id}' existiert nicht.")
+            raise GameError(f"Request '{request_id}' does not exist.")
         request = self.requests.pop(request_id)
         order_id = request_id.replace("REQ", "ORD", 1)
         self.orders[order_id] = {
@@ -231,19 +238,25 @@ class FactorySimulation:
 
     def _reject_request(self, request_id: str) -> None:
         if request_id not in self.requests:
-            raise GameError(f"Anfrage '{request_id}' existiert nicht.")
+            raise GameError(f"Request '{request_id}' does not exist.")
         del self.requests[request_id]
+        self.refill_remaining = self.REFILL_DELAY
+
+    def _cancel_order(self, order_id: str) -> None:
+        if order_id not in self.orders:
+            raise GameError(f"Order '{order_id}' does not exist.")
+        del self.orders[order_id]
         self.refill_remaining = self.REFILL_DELAY
 
     def _ship(self, order_id: str) -> int:
         if (self.state.drone_x, self.state.drone_y) != self.SHIPPING:
-            raise GameError("ship() kann nur auf dem Versandfeld ausgefuehrt werden.")
+            raise GameError("ship() can only be used on the shipping tile.")
         if order_id not in self.orders:
-            raise GameError(f"Auftrag '{order_id}' existiert nicht.")
+            raise GameError(f"Order '{order_id}' does not exist.")
         order = self.orders[order_id]
         product, quantity = order["product"], order["quantity"]
         if self.shipping_inventory.get(product, 0) < quantity:
-            raise GameError(f"Versandlager: {quantity}x {product} fuer Komplettlieferung erforderlich.")
+            raise GameError(f"Shipping stock requires {quantity}x {product} for a complete delivery.")
         on_time = self.state.ticks <= order["deadline_tick"]
         payout = order["base_payout"] + (order["on_time_bonus"] if on_time else 0)
         self.shipping_inventory[product] -= quantity
@@ -309,10 +322,10 @@ class FactorySimulation:
 
     def place_machine(self, kind: str, x: int, y: int) -> None:
         if kind not in self.unlocked_machines:
-            raise GameError("Diese Maschine ist noch nicht freigeschaltet.")
+            raise GameError("This machine has not been unlocked yet.")
         definition = FACTORY_MACHINE_DEFINITIONS[kind]
         if self.credits < definition["cost"]:
-            raise GameError(f"Nicht genug Credits: {definition['name']} kostet {definition['cost']}.")
+            raise GameError(f"Not enough credits: {definition['name']} costs {definition['cost']}.")
         self._validate_build_position(x, y)
         self.credits -= definition["cost"]
         self.state.machines.append(Machine(kind, x, y, definition["name"], list(definition["inputs"]), definition["output"], definition["duration"]))
@@ -320,14 +333,14 @@ class FactorySimulation:
     def move_machine(self, old_x: int, old_y: int, new_x: int, new_y: int) -> None:
         machine = self.machine_at(old_x, old_y)
         if machine.running or machine.inputs or machine.output is not None:
-            raise GameError("Nur leere, gestoppte Maschinen koennen verschoben werden.")
+            raise GameError("Only empty, stopped machines can be moved.")
         self._validate_build_position(new_x, new_y, ignore=machine)
         machine.x, machine.y = new_x, new_y
 
     def sell_machine(self, x: int, y: int) -> int:
         machine = self.machine_at(x, y)
         if machine.running or machine.inputs or machine.output is not None:
-            raise GameError("Nur leere, gestoppte Maschinen koennen verkauft werden.")
+            raise GameError("Only empty, stopped machines can be sold.")
         refund = FACTORY_MACHINE_DEFINITIONS[machine.kind]["cost"] * 3 // 4
         self.state.machines.remove(machine)
         self.credits += refund
@@ -337,15 +350,15 @@ class FactorySimulation:
         for machine in self.state.machines:
             if (machine.x, machine.y) == (x, y):
                 return machine
-        raise GameError("An dieser Position steht keine Maschine.")
+        raise GameError("There is no machine at this position.")
 
     def _validate_build_position(self, x: int, y: int, ignore: Machine | None = None) -> None:
         if not (0 <= x < self.state.size and 0 <= y < self.state.size):
-            raise GameError("Die Position liegt ausserhalb der Fabrikhalle.")
+            raise GameError("This position is outside the factory.")
         if (x, y) in {self.WAREHOUSE, self.SHIPPING, (self.state.drone_x, self.state.drone_y)}:
-            raise GameError("Dieses Feld ist reserviert oder durch die Drohne belegt.")
+            raise GameError("This tile is reserved or occupied by the drone.")
         if any(machine is not ignore and (machine.x, machine.y) == (x, y) for machine in self.state.machines):
-            raise GameError("Auf diesem Feld steht bereits eine Maschine.")
+            raise GameError("There is already a machine on this tile.")
 
     def to_save_data(self) -> dict[str, Any]:
         return {
@@ -362,10 +375,17 @@ class FactorySimulation:
             return cls(fallback_credits)
         factory = cls.__new__(cls)
         state = data["state"]
+        machines = []
+        for machine_data in state.get("machines", []):
+            normalized = dict(machine_data)
+            definition = FACTORY_MACHINE_DEFINITIONS.get(normalized.get("kind"))
+            if definition:
+                normalized["name"] = definition["name"]
+            machines.append(Machine(**normalized))
         factory.state = WorldState(
             size=state.get("size", 10), drone_x=state["drone"]["x"], drone_y=state["drone"]["y"],
             inventory=state["drone"].get("inventory"), ticks=state.get("ticks", 0),
-            delivered=state.get("delivered", {}), machines=[Machine(**machine) for machine in state.get("machines", [])],
+            delivered=state.get("delivered", {}), machines=machines,
         )
         factory.credits = data.get("credits", fallback_credits)
         factory.input_inventory = dict(data.get("input_inventory", {}))
